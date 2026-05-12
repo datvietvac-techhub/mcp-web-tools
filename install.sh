@@ -3,18 +3,19 @@
 #
 #   git clone <repo> && cd mcp-web-tool && ./install.sh
 #
+# Bootstrap only — does NOT start containers. After this runs, use:
+#   make up        # start the stack
+#   make smoke     # verify endpoints
+#   make install   # if you want the old one-shot (bootstrap + up + smoke)
+#
 # Idempotent: safe to re-run. It will
 #   1. check prerequisites (docker, docker compose v2, daemon reachable, free ports)
 #   2. create .env from .env.example if missing
 #   3. generate SEARXNG_SECRET if it's empty
-#   4. build + start the stack (docker compose up -d --build)
-#   5. wait for searxng + crawl4ai to report healthy
-#   6. run smoke tests against all three HTTP endpoints
+#   4. optionally pull upstream images (--pull)
 #
 # Flags:
-#   --no-build     don't pass --build to `docker compose up` (use existing image)
-#   --pull         `docker compose pull` before starting (refresh upstream images)
-#   --no-smoke     skip the post-start smoke tests
+#   --pull         `docker compose pull` upstream images now
 #   --skip-checks  skip the prerequisite checks (ports etc.)
 #   -h, --help     show this help
 
@@ -37,12 +38,10 @@ warn()  { printf '%s\n' "${YLW}  ⚠ $*${RST}"; }
 die()   { printf '%s\n' "${RED}  ✗ $*${RST}" >&2; exit 1; }
 
 # ── args ──────────────────────────────────────────────────────────────────────
-DO_BUILD=1 DO_PULL=0 DO_SMOKE=1 DO_CHECKS=1
+DO_PULL=0 DO_CHECKS=1
 for arg in "$@"; do
   case "$arg" in
-    --no-build)    DO_BUILD=0 ;;
     --pull)        DO_PULL=1 ;;
-    --no-smoke)    DO_SMOKE=0 ;;
     --skip-checks) DO_CHECKS=0 ;;
     -h|--help)
       # print the leading comment block (skip the shebang, stop at first code line)
@@ -81,7 +80,6 @@ fi
 ok "docker daemon reachable"
 
 command -v openssl >/dev/null 2>&1 || warn "openssl not found — will fall back to python3/urandom for secret generation"
-command -v curl    >/dev/null 2>&1 || warn "curl not found — post-start smoke tests will be skipped"
 
 if [ "$DO_CHECKS" -eq 1 ]; then
   port_busy() {
@@ -128,92 +126,27 @@ else
   ok "SEARXNG_SECRET already set"
 fi
 
-# ── 4. build + up ─────────────────────────────────────────────────────────────
+# ── 4. optional image pull ────────────────────────────────────────────────────
 if [ "$DO_PULL" -eq 1 ]; then
   step "Pulling upstream images"
   compose pull valkey searxng crawl4ai
 fi
 
-step "Starting the stack"
-if [ "$DO_BUILD" -eq 1 ]; then
-  compose up -d --build
-else
-  compose up -d
-fi
-ok "containers started"
-
-# ── 5. wait for health ────────────────────────────────────────────────────────
-step "Waiting for services to become healthy"
-wait_healthy() {
-  local cname="$1" label="$2" timeout="${3:-180}" waited=0 status
-  while :; do
-    status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cname" 2>/dev/null || echo missing)"
-    case "$status" in
-      healthy|running) ok "$label: $status"; return 0 ;;
-      missing)         die "$label: container '$cname' not found" ;;
-      *)
-        if [ "$waited" -ge "$timeout" ]; then
-          warn "$label: still '$status' after ${timeout}s — check 'docker compose logs $cname'"
-          return 1
-        fi
-        printf '\r%s' "${DIM}  $label: $status  (${waited}s/${timeout}s)…${RST}"
-        sleep 3; waited=$((waited + 3)) ;;
-    esac
-  done
-}
-rc=0
-wait_healthy web-tool-searxng  "searxng"  180 || rc=1
-wait_healthy web-tool-crawl4ai "crawl4ai" 240 || rc=1   # first run pulls Chromium image
-wait_healthy web-tool-mcp      "web-mcp"  60  || rc=1
-printf '\n'
-
-# ── 6. smoke tests ────────────────────────────────────────────────────────────
-if [ "$DO_SMOKE" -eq 1 ] && command -v curl >/dev/null 2>&1; then
-  step "Smoke tests"
-  if curl -fsS -m 15 "http://localhost:8080/search?q=hello&format=json" >/dev/null 2>&1; then
-    ok "SearXNG JSON API responds (http://localhost:8080)"
-  else
-    warn "SearXNG JSON API not responding yet — retry: curl 'http://localhost:8080/search?q=hello&format=json'"
-    rc=1
-  fi
-  if curl -fsS -m 30 -X POST "http://localhost:11235/md" -H 'Content-Type: application/json' -d '{"url":"https://example.com","f":"fit"}' >/dev/null 2>&1; then
-    ok "Crawl4AI /md responds (http://localhost:11235)"
-  else
-    warn "Crawl4AI /md not responding yet — it can take a minute on first start"
-    rc=1
-  fi
-  code="$(curl -s -o /dev/null -w '%{http_code}' -m 10 "http://localhost:8000/mcp" || echo 000)"
-  if [ "$code" = "406" ] || [ "$code" = "400" ] || [ "$code" = "200" ]; then
-    ok "MCP endpoint up (http://localhost:8000/mcp — HTTP $code on bare GET is expected)"
-  else
-    warn "MCP endpoint returned HTTP $code — check 'docker compose logs web-mcp'"
-    rc=1
-  fi
-fi
-
 # ── done ──────────────────────────────────────────────────────────────────────
-transport="$(grep -E '^MCP_TRANSPORT=' .env | cut -d= -f2- || echo http)"
-printf '\n'
-if [ "$rc" -eq 0 ]; then
-  printf '%s\n' "${BOLD}${GRN}✔ mcp-web-tool is up.${RST}"
-else
-  printf '%s\n' "${BOLD}${YLW}△ mcp-web-tool started, but some checks didn't pass — see warnings above.${RST}"
-fi
+mcp_port="$(grep -E '^MCP_PORT=' .env | cut -d= -f2- || echo 8000)"
+play_port="$(grep -E '^PLAYGROUND_PORT=' .env | cut -d= -f2- || echo 8001)"
+printf '\n%s\n' "${BOLD}${GRN}✔ bootstrap complete${RST}"
 cat <<EOF
 
-  ${BOLD}Endpoints${RST}
+  ${BOLD}Next${RST}
+    make up           # start the stack
+    make smoke        # verify endpoints
+    make playground   # launch the FastAPI dev API on :${play_port:-8001}
+
+  ${BOLD}Endpoints (once up)${RST}
     SearXNG    http://localhost:8080
     Crawl4AI   http://localhost:11235   (playground: /playground)
-    MCP        http://localhost:8000/mcp   (transport: ${transport})
-
-  ${BOLD}Connect an agent${RST}
-    Claude Code:   claude mcp add --transport http web-tool http://localhost:8000/mcp
-    Hermes:        hermes mcp add web-tool --url http://localhost:8000/mcp
-
-  ${BOLD}Manage${RST}
-    make ps        # status            make logs      # tail logs
-    make down      # stop              make restart   # restart
-    make clean     # stop + wipe cache volume
+    MCP        http://localhost:${mcp_port:-8000}/mcp
 
 EOF
-exit "$rc"
+exit 0

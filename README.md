@@ -14,7 +14,11 @@ docker-compose.yml  (network: web-tool-net)
   valkey     valkey/valkey:8-alpine                  cache / limiter backend for SearXNG
   searxng    searxng/searxng        :8080            metasearch, JSON API enabled
   crawl4ai   unclecode/crawl4ai     :11235           REST crawler (/md, /crawl), shm_size 1g
-  web-mcp    build ./mcp            :8000            MCP server — tools: web_search, web_extractor
+  web-mcp    build ./mcp           :${MCP_PORT:-8000}  MCP server — tools: web_search, web_extractor
+
+on-demand (make playground, not in compose):
+  playground = same image, runs FastAPI on :${PLAYGROUND_PORT:-8001}
+               POST /search, POST /extract — wraps the same tool impls
 ```
 
 ## Install
@@ -24,25 +28,31 @@ docker-compose.yml  (network: web-tool-net)
 ```bash
 git clone <this-repo> mcp-web-tool
 cd mcp-web-tool
-./install.sh
+./install.sh        # bootstrap: prereq checks, .env, SEARXNG_SECRET — does NOT start containers
+make up             # start the stack
+make smoke          # verify endpoints
 ```
 
-`install.sh` is idempotent (safe to re-run). It checks prerequisites, creates `.env` from `.env.example`, generates `SEARXNG_SECRET` for you, builds the `web-mcp` image, brings the stack up, waits for `searxng` + `crawl4ai` to report healthy, and runs smoke tests against all three endpoints. First run pulls the Crawl4AI image (~GB, includes Chromium) — budget a couple of minutes.
+`install.sh` is **bootstrap-only** and idempotent (safe to re-run). It checks prerequisites, creates `.env` from `.env.example`, and generates `SEARXNG_SECRET`. It does not run `compose up` — that's `make up`. First `make up` pulls the Crawl4AI image (~GB, includes Chromium) — budget a couple of minutes.
 
-Flags: `--no-build` (skip rebuilding the MCP image), `--pull` (refresh upstream images first), `--no-smoke`, `--skip-checks`, `--help`.
+Prefer a single command? `make install` runs bootstrap + `compose up -d --build` + smoke in one go.
+
+Flags on `install.sh`: `--pull` (pull upstream images now), `--skip-checks`, `--help`.
 
 If `docker` needs `sudo` on your box, run `sudo ./install.sh` (or add yourself to the `docker` group: `sudo usermod -aG docker "$USER" && newgrp docker`).
 
 ### Day-to-day (`make`)
 
 ```
-make install   # = ./install.sh   (forward flags with ARGS="--pull")
-make up        # start            make down      # stop (keeps cache volume)
-make restart   # restart          make ps        # status
-make logs      # tail logs        make smoke     # re-run the endpoint smoke tests
-make build     # rebuild web-mcp  make pull      # refresh upstream images
-make secret    # print a fresh SEARXNG_SECRET value
-make clean     # stop + remove the valkey cache volume
+make bootstrap  # ./install.sh only (prereqs, .env, secret) — no compose up
+make install    # one-shot: bootstrap + up + smoke (forward flags with ARGS="--pull")
+make up         # start              make down       # stop (keeps cache volume)
+make restart    # restart            make ps         # status
+make logs       # tail logs          make smoke      # re-run endpoint smoke tests
+make build      # rebuild web-mcp    make pull       # refresh upstream images
+make playground # run the FastAPI dev API (alias: make play)
+make secret     # print a fresh SEARXNG_SECRET value
+make clean      # stop + remove the valkey cache volume
 ```
 
 ### Manual install (no script)
@@ -66,12 +76,12 @@ curl -s -X POST http://localhost:11235/md \
   -d '{"url":"https://example.com","f":"fit"}' | jq '.markdown'
 
 # MCP server: inspect tools
-npx @modelcontextprotocol/inspector       # then connect to http://localhost:8000/mcp
+npx @modelcontextprotocol/inspector       # then connect to http://localhost:${MCP_PORT:-8000}/mcp
 ```
 
 ## Connecting an agent
 
-The MCP server listens on **`http://<host>:8000/mcp`** (Streamable HTTP) by default.
+The MCP server listens on **`http://<host>:${MCP_PORT}/mcp`** (Streamable HTTP) by default — `MCP_PORT` defaults to `8000`.
 
 Claude Code:
 
@@ -91,31 +101,151 @@ Any MCP client config (Hermes, etc.):
 
 To run the MCP server over stdio instead (single local client launches it as a subprocess), set `MCP_TRANSPORT=stdio` in `.env`. In that mode you typically don't expose port 8000; point the client at `python mcp/server.py` (or `docker compose run`).
 
-## Tools
+## MCP tools
 
-### `web_search(query, num_results=10, categories="general", language="auto", time_range=None)`
+The server exposes two tools at `http://<host>:${MCP_PORT}/mcp`. Implementations live in `mcp/tools.py` and are shared with the dev playground below.
 
-Returns `{ query, results: [{title, url, snippet, engine, score}], answers, suggestions, number_of_results }`. Results are de-duplicated by normalized URL and truncated to `num_results`. `time_range` accepts `day` / `week` / `month` / `year`.
+### `web_search`
 
-### `web_extractor(urls, mode="fit", query=None, bypass_cache=False)`
+Search the web via the self-hosted SearXNG instance.
 
-`urls` is a single URL string or a list (max 20). Returns `{ results: [{url, status, markdown, word_count, error?}] }` in input order. `mode`:
+| param | type | default | notes |
+|---|---|---|---|
+| `query` | string | required | search query |
+| `num_results` | int | `10` | clamped to `1..50` |
+| `categories` | string | `"general"` | SearXNG category: `general`, `news`, `science`, `it`, `images`, … |
+| `language` | string | `"auto"` | `"en"`, `"vi"`, …; `"auto"` lets SearXNG decide |
+| `time_range` | string \| null | `null` | `"day"`, `"week"`, `"month"`, `"year"` |
 
-- `fit` — pruned main-content markdown (default)
-- `raw` — full-page markdown
-- `bm25` / `llm` — relevance-filtered; requires `query`
+**Returns**
 
-Multiple URLs are fetched in parallel (`MAX_CONCURRENCY`, default 5).
+```json
+{
+  "query": "...",
+  "results": [
+    { "title": "...", "url": "https://...", "snippet": "...", "engine": "...", "score": 1.0 }
+  ],
+  "answers": [...],
+  "suggestions": ["...", "..."],
+  "number_of_results": 12345
+}
+```
+
+Results are de-duplicated by normalized URL and truncated to `num_results`. Cached in-process for `MCP_CACHE_TTL` seconds (default `300`). On failure the dict includes an `"error"` key and `"results": []`.
+
+### `web_extractor`
+
+Fetch one or more URLs through Crawl4AI and return clean Markdown.
+
+| param | type | default | notes |
+|---|---|---|---|
+| `urls` | string \| list[string] | required | one URL or a list — max **20** per call |
+| `mode` | string | `"fit"` | `fit` (pruned main content), `raw` (full page), `bm25` / `llm` (relevance-filtered — requires `query`) |
+| `query` | string \| null | `null` | focus query for `bm25` / `llm` mode |
+| `bypass_cache` | bool | `false` | skip the local cache and ask Crawl4AI to re-fetch |
+
+**Returns**
+
+```json
+{
+  "results": [
+    {
+      "url": "https://...",
+      "status": "ok",          // "ok" | "empty" | "error"
+      "markdown": "# Heading\n...",
+      "word_count": 1234,
+      "error": "..."            // only on status=error
+    }
+  ]
+}
+```
+
+Order matches the input URL list. URLs are fetched in parallel up to `MAX_CONCURRENCY` (default 5). Cached for `EXTRACT_CACHE_TTL` seconds (default `1800`).
+
+## Dev playground (FastAPI)
+
+Useful when you want to poke `web_search` / `web_extractor` results from `curl` without wiring up an MCP client. The playground is a thin FastAPI app that imports the same impls from `mcp/tools.py`, so it always matches the MCP server's behavior.
+
+**Not in `docker-compose.yml`** — it's run on demand as a one-shot container off the existing `web-mcp` image. The main stack must already be up (it talks to `searxng` and `crawl4ai` over the compose network).
+
+```bash
+make up           # if not already running
+make playground   # alias: make play
+```
+
+Listens on `http://localhost:${PLAYGROUND_PORT}` (default `8001`). Ctrl-C stops it; container is removed automatically (`--rm`).
+
+### Endpoints
+
+| method | path | body | description |
+|---|---|---|---|
+| GET | `/healthz` | — | liveness probe → `{"ok": true}` |
+| POST | `/search` | `SearchReq` | calls `web_search_impl` and returns the same shape as the MCP tool |
+| POST | `/extract` | `ExtractReq` | calls `web_extractor_impl` and returns the same shape as the MCP tool |
+
+Bodies mirror the tool signatures one-for-one (all optional params have the same defaults):
+
+```jsonc
+// POST /search
+{ "query": "anthropic claude", "num_results": 5, "categories": "general",
+  "language": "auto", "time_range": "week" }
+
+// POST /extract
+{ "urls": ["https://example.com", "https://anthropic.com"],
+  "mode": "fit", "query": null, "bypass_cache": false }
+```
+
+### Quick examples
+
+```bash
+# health
+curl -s http://localhost:8001/healthz
+# → {"ok":true}
+
+# search
+curl -s -X POST http://localhost:8001/search \
+  -H 'content-type: application/json' \
+  -d '{"query":"hello world","num_results":3}' | jq '.results[0].title'
+
+# extract a single URL
+curl -s -X POST http://localhost:8001/extract \
+  -H 'content-type: application/json' \
+  -d '{"urls":"https://example.com"}' | jq '.results[0].markdown' | head -5
+
+# extract multiple URLs in parallel
+curl -s -X POST http://localhost:8001/extract \
+  -H 'content-type: application/json' \
+  -d '{"urls":["https://example.com","https://anthropic.com"],"mode":"fit"}' \
+  | jq '.results[] | {url, status, word_count}'
+```
+
+FastAPI also auto-generates Swagger UI at `http://localhost:8001/docs` and a ReDoc view at `http://localhost:8001/redoc`.
+
+> **Dev-only.** No auth, verbose errors, accepts arbitrary URLs. Don't expose `PLAYGROUND_PORT` publicly.
 
 ## Configuration
 
-Everything is set via `.env` (see `.env.example`): `SEARXNG_SECRET`, `CRAWL4AI_API_TOKEN`, `MCP_TRANSPORT`, `MCP_CACHE_TTL`, `EXTRACT_CACHE_TTL`, `REQUEST_TIMEOUT`, `EXTRACT_TIMEOUT`, `MAX_CONCURRENCY`. Set a cache TTL to `0` to disable that layer.
+Everything is set via `.env` (see `.env.example`):
+
+| var | default | purpose |
+|---|---|---|
+| `SEARXNG_SECRET` | _(required)_ | HMAC signing key for SearXNG — not an API key |
+| `CRAWL4AI_API_TOKEN` | _(empty)_ | optional bearer token if Crawl4AI is locked down |
+| `MCP_TRANSPORT` | `http` | `http` (streamable-http) or `stdio` (subprocess) |
+| `MCP_PORT` | `8000` | host port for the MCP server (also used for `make smoke`) |
+| `PLAYGROUND_PORT` | `8001` | host port for `make playground` |
+| `MCP_CACHE_TTL` | `300` | `web_search` cache TTL in seconds (`0` disables) |
+| `EXTRACT_CACHE_TTL` | `1800` | `web_extractor` cache TTL in seconds (`0` disables) |
+| `REQUEST_TIMEOUT` | `30` | SearXNG request timeout (s) |
+| `EXTRACT_TIMEOUT` | `60` | Crawl4AI request timeout (s) |
+| `MAX_CONCURRENCY` | `5` | parallel Crawl4AI requests per `web_extractor` call |
+| `VALKEY_IMAGE` / `SEARXNG_IMAGE` / `CRAWL4AI_IMAGE` | `:latest` | pin image versions for reproducible installs |
+
+After changing `MCP_PORT`, run `make restart` (not just `up`) so the new host-port mapping takes effect.
 
 `SEARXNG_SECRET` is **not** an API key — nothing sends it. SearXNG uses it server-side to sign image-proxy URLs (HMAC) and internal tokens; it just needs to be random and stable. `install.sh` generates it; the SearXNG container won't start without one.
 
-Image versions are pinnable for reproducible installs: set `VALKEY_IMAGE`, `SEARXNG_IMAGE`, `CRAWL4AI_IMAGE` in `.env` (they default to `:latest`). Pinning at least `CRAWL4AI_IMAGE` is recommended in production.
-
-Search quality is tuned in `searxng/settings.yml` (which engines are enabled, weights, categories) — restart the `searxng` service after editing.
+Search quality is tuned in `searxng/settings.yml` (which engines are enabled, weights, categories) — restart the `searxng` service after editing. Pinning `CRAWL4AI_IMAGE` to a specific version is recommended in production — its `/md` request shape has shifted between releases.
 
 ## Notes / gotchas
 

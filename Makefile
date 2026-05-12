@@ -1,22 +1,27 @@
 # mcp-web-tool — common operations.
-#   make install   one-shot bootstrap on a fresh machine (calls ./install.sh)
-#   make up/down/restart/ps/logs/build/pull/smoke/secret/clean
+#   make bootstrap  one-time setup on a fresh machine (prereqs, .env, secret)
+#   make up         start the stack
+#   make install    convenience one-shot: bootstrap + up + smoke
+#   make playground run the FastAPI dev API (one-shot, joins the compose network)
 #
-# `make install ARGS="--pull --no-smoke"` forwards flags to install.sh.
+# `make bootstrap ARGS="--pull"` forwards flags to install.sh.
 
 COMPOSE := docker compose
 ARGS    ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install up down restart ps logs build pull smoke secret clean
+.PHONY: help bootstrap install up down restart ps logs build pull smoke secret clean playground play
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
 	  | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
-install: ## Bootstrap the stack on this machine (prereqs, .env, secret, build, up, smoke)
+bootstrap: ## Bootstrap only — prereqs, .env, secret (no compose up)
 	@./install.sh $(ARGS)
+
+install: ## One-shot: bootstrap + up + smoke (convenience wrapper)
+	@./install.sh $(ARGS) && $(COMPOSE) up -d --build && $(MAKE) smoke
 
 up: ## Start the stack in the background
 	$(COMPOSE) up -d
@@ -40,13 +45,29 @@ pull: ## Pull fresh upstream images (valkey, searxng, crawl4ai)
 	$(COMPOSE) pull valkey searxng crawl4ai
 
 smoke: ## Hit all three HTTP endpoints to confirm they respond
-	@set -e; \
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	MCP_PORT=$${MCP_PORT:-8000}; \
+	set -e; \
 	echo "SearXNG  :" ; curl -fsS -m 15 "http://localhost:8080/search?q=hello&format=json" >/dev/null && echo "  ok" ; \
 	echo "Crawl4AI :" ; curl -fsS -m 30 -X POST "http://localhost:11235/md" -H 'Content-Type: application/json' -d '{"url":"https://example.com","f":"fit"}' >/dev/null && echo "  ok" ; \
-	echo "MCP      :" ; printf "  HTTP %s (406/400/200 expected on bare GET)\n" "$$(curl -s -o /dev/null -w '%{http_code}' -m 10 http://localhost:8000/mcp)"
+	echo "MCP      :" ; printf "  HTTP %s (406/400/200 expected on bare GET)\n" "$$(curl -s -o /dev/null -w '%{http_code}' -m 10 http://localhost:$$MCP_PORT/mcp)"
 
 secret: ## Generate a SEARXNG_SECRET value and print it (does not write .env)
 	@openssl rand -hex 32 2>/dev/null || python3 -c 'import secrets;print(secrets.token_hex(32))'
+
+playground: ## Run the FastAPI dev API (one-shot, joins the compose network)
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	PORT=$${PLAYGROUND_PORT:-8001}; \
+	if ! $(COMPOSE) ps -q searxng | grep -q .; then \
+	  echo "stack isn't up — run 'make up' first" >&2; exit 1; \
+	fi; \
+	echo "playground → http://localhost:$$PORT (Ctrl-C to stop)"; \
+	$(COMPOSE) run --rm --no-deps \
+	  -p $$PORT:$$PORT \
+	  -e PLAYGROUND_PORT=$$PORT \
+	  web-mcp python playground.py
+
+play: playground ## Alias for `make playground`
 
 clean: ## Stop the stack AND remove the valkey cache volume
 	$(COMPOSE) down -v

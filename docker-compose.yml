@@ -68,14 +68,14 @@ services:
       - CRAWL4AI_API_TOKEN=${CRAWL4AI_API_TOKEN:-}
       - MCP_TRANSPORT=${MCP_TRANSPORT:-http}
       - MCP_HOST=0.0.0.0
-      - MCP_PORT=8000
+      - MCP_PORT=${MCP_PORT:-8000}
       - MCP_CACHE_TTL=${MCP_CACHE_TTL:-300}
       - EXTRACT_CACHE_TTL=${EXTRACT_CACHE_TTL:-1800}
       - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
       - EXTRACT_TIMEOUT=${EXTRACT_TIMEOUT:-60}
       - MAX_CONCURRENCY=${MAX_CONCURRENCY:-5}
     ports:
-      - "8000:8000"
+      - "${MCP_PORT:-8000}:${MCP_PORT:-8000}"
     networks:
       - web-tool-net
     depends_on:
