@@ -1,29 +1,38 @@
 #!/usr/bin/env bash
-# install.sh — bootstrap the mcp-web-tool stack on a fresh machine.
+# install.sh — bootstrap the mcp-web-tool stack.
 #
-#   git clone <repo> && cd mcp-web-tool && ./install.sh
+# Two ways to run:
+#
+#   1) One-liner (clones the repo, then bootstraps):
+#        curl -fsSL https://github.com/datvietvac-techhub/agent-web-tool-mcp/releases/latest/download/install.sh | bash
+#        curl -fsSL https://github.com/datvietvac-techhub/agent-web-tool-mcp/releases/latest/download/install.sh | bash -s -- --dir /opt/mcp-web-tool --pull
+#
+#   2) From an existing checkout:
+#        git clone https://github.com/datvietvac-techhub/agent-web-tool-mcp.git && cd agent-web-tool-mcp
+#        ./install.sh
 #
 # Bootstrap only — does NOT start containers. After this runs, use:
 #   make up        # start the stack
 #   make smoke     # verify endpoints
-#   make install   # if you want the old one-shot (bootstrap + up + smoke)
+#   make install   # one-shot: bootstrap + up + smoke
 #
 # Idempotent: safe to re-run. It will
-#   1. check prerequisites (docker, docker compose v2, daemon reachable, free ports)
-#   2. create .env from .env.example if missing
-#   3. generate SEARXNG_SECRET if it's empty
-#   4. optionally pull upstream images (--pull)
+#   1. (curl-pipe mode only) clone or update the repo, then re-exec from it
+#   2. check prerequisites (docker, docker compose v2, daemon reachable, free ports)
+#   3. create .env from .env.example if missing
+#   4. generate SEARXNG_SECRET if it's empty
+#   5. optionally pull upstream images (--pull)
 #
 # Flags:
+#   --dir <path>   target dir for the curl-pipe clone (default: ~/.local/share/mcp-web-tool)
 #   --pull         `docker compose pull` upstream images now
 #   --skip-checks  skip the prerequisite checks (ports etc.)
 #   -h, --help     show this help
 
 set -euo pipefail
 
-# ── locate repo root (this script's directory) ────────────────────────────────
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-cd "$SCRIPT_DIR"
+REPO_URL="${REPO_URL:-https://github.com/datvietvac-techhub/agent-web-tool-mcp.git}"
+REPO_BRANCH="${REPO_BRANCH:-main}"
 
 # ── pretty output ─────────────────────────────────────────────────────────────
 if [ -t 1 ]; then
@@ -37,16 +46,85 @@ ok()    { printf '%s\n' "${GRN}  ✓ $*${RST}"; }
 warn()  { printf '%s\n' "${YLW}  ⚠ $*${RST}"; }
 die()   { printf '%s\n' "${RED}  ✗ $*${RST}" >&2; exit 1; }
 
+print_help() {
+  cat <<EOF
+install.sh — bootstrap the mcp-web-tool stack.
+
+Usage:
+  # one-liner (clones the repo, then bootstraps):
+  curl -fsSL ${REPO_URL%.git}/releases/latest/download/install.sh | bash
+  curl -fsSL ${REPO_URL%.git}/releases/latest/download/install.sh | bash -s -- --dir /opt/mcp-web-tool --pull
+
+  # from an existing checkout:
+  ./install.sh [--pull] [--skip-checks]
+
+Flags:
+  --dir <path>   target dir for the curl-pipe clone (default: ~/.local/share/mcp-web-tool)
+  --pull         \`docker compose pull\` upstream images after bootstrap
+  --skip-checks  skip the prerequisite checks (ports etc.)
+  -h, --help     show this help
+EOF
+}
+
+# ── 0. detect curl-pipe mode and self-clone if needed ─────────────────────────
+# When run via `curl ... | bash`, BASH_SOURCE[0] is empty or points outside the
+# repo, so docker-compose.yml won't be next to it. In that case we git-clone
+# the repo and re-exec install.sh from the checkout so the rest of the script
+# runs exactly as it would after a manual `git clone && ./install.sh`.
+SCRIPT_PATH="${BASH_SOURCE[0]:-}"
+if [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
+  SCRIPT_DIR="$(cd -- "$(dirname -- "$SCRIPT_PATH")" >/dev/null 2>&1 && pwd)"
+else
+  SCRIPT_DIR=""
+fi
+
+if [ -z "$SCRIPT_DIR" ] || [ ! -f "$SCRIPT_DIR/docker-compose.yml" ]; then
+  CLONE_DIR=""
+  PASS_ARGS=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dir)     [ $# -ge 2 ] || die "--dir requires a path"; CLONE_DIR="$2"; shift 2 ;;
+      --dir=*)   CLONE_DIR="${1#--dir=}"; shift ;;
+      -h|--help) print_help; exit 0 ;;
+      *)         PASS_ARGS+=("$1"); shift ;;
+    esac
+  done
+
+  if [ -z "$CLONE_DIR" ]; then
+    if [ -n "${HOME:-}" ]; then
+      CLONE_DIR="$HOME/.local/share/mcp-web-tool"
+    else
+      CLONE_DIR="$PWD/mcp-web-tool"
+    fi
+  fi
+
+  command -v git >/dev/null 2>&1 || die "git not found — install git first, then re-run."
+
+  step "Fetching mcp-web-tool"
+  if [ -d "$CLONE_DIR/.git" ]; then
+    info "repo present at $CLONE_DIR — updating to origin/$REPO_BRANCH"
+    git -C "$CLONE_DIR" fetch --depth 1 origin "$REPO_BRANCH"
+    git -C "$CLONE_DIR" reset --hard "origin/$REPO_BRANCH"
+  else
+    mkdir -p "$(dirname -- "$CLONE_DIR")"
+    info "cloning $REPO_URL → $CLONE_DIR"
+    git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$CLONE_DIR"
+  fi
+  ok "repo ready at $CLONE_DIR"
+
+  exec bash "$CLONE_DIR/install.sh" ${PASS_ARGS[@]+"${PASS_ARGS[@]}"}
+fi
+
+cd "$SCRIPT_DIR"
+
 # ── args ──────────────────────────────────────────────────────────────────────
 DO_PULL=0 DO_CHECKS=1
 for arg in "$@"; do
   case "$arg" in
     --pull)        DO_PULL=1 ;;
     --skip-checks) DO_CHECKS=0 ;;
-    -h|--help)
-      # print the leading comment block (skip the shebang, stop at first code line)
-      awk 'NR==1{next} /^#/{sub(/^# ?/,""); print; next} {exit}' "$0"
-      exit 0 ;;
+    --dir|--dir=*) ;;  # only meaningful in curl-pipe mode; ignore when in-repo
+    -h|--help)     print_help; exit 0 ;;
     *) die "unknown flag: $arg (try --help)" ;;
   esac
 done
@@ -138,7 +216,11 @@ play_port="$(grep -E '^PLAYGROUND_PORT=' .env | cut -d= -f2- || echo 8001)"
 printf '\n%s\n' "${BOLD}${GRN}✔ bootstrap complete${RST}"
 cat <<EOF
 
+  ${BOLD}Repo${RST}
+    $SCRIPT_DIR
+
   ${BOLD}Next${RST}
+    cd "$SCRIPT_DIR"
     make up           # start the stack
     make smoke        # verify endpoints
     make playground   # launch the FastAPI dev API on :${play_port:-8001}
