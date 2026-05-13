@@ -1,0 +1,49 @@
+agent-web-tool-mcp
+Copyright 2025 datvietvac-techhub
+
+This product is licensed under the Apache License, Version 2.0.
+You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+
+---
+
+THIRD-PARTY COMPONENTS
+
+This product incorporates or depends on the following third-party software.
+Each component is subject to its own license terms as stated below.
+
+-------------------------------------------------------------------------------
+Crawl4AI
+https://github.com/unclecode/crawl4ai
+License: Apache License, Version 2.0
+         https://github.com/unclecode/crawl4ai/blob/main/LICENSE
+
+Required attribution (as specified by the Crawl4AI license):
+
+  "This product includes software developed by UncleCode
+  (https://x.com/unclecode) as part of the Crawl4AI project
+  (https://github.com/unclecode/crawl4ai)."
+
+-------------------------------------------------------------------------------
+SearXNG
+https://github.com/searxng/searxng
+License: GNU Affero General Public License, Version 3.0 (AGPL-3.0)
+         https://github.com/searxng/searxng/blob/master/LICENSE
+
+This product uses SearXNG as an independent Docker service. SearXNG source
+code is not included, modified, or redistributed in this repository. Users
+who modify and deploy SearXNG must comply with AGPL-3.0 requirements,
+including making the modified source available.
+
+-------------------------------------------------------------------------------
+FastMCP
+https://github.com/jlowin/fastmcp
+License: Apache License, Version 2.0
+         https://github.com/jlowin/fastmcp/blob/main/LICENSE
+
+-------------------------------------------------------------------------------
+Valkey
+https://github.com/valkey-io/valkey
+License: BSD 3-Clause License
+         https://github.com/valkey-io/valkey/blob/unstable/LICENSE.txt
+
+-------------------------------------------------------------------------------

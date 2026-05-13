@@ -387,3 +387,17 @@ When filing a bug, include:
 - relevant logs: `make logs` (or `docker compose logs <service>`),
 - `.env` with `SEARXNG_SECRET` and `CRAWL4AI_API_TOKEN` redacted,
 - exact tool call (params) and the response you got.
+
+---
+
+## License
+
+This project is licensed under the [Apache License, Version 2.0](LICENSE).
+
+## Attributions
+
+**Crawl4AI** — the `web_extractor` tool is powered by [Crawl4AI](https://github.com/unclecode/crawl4ai), a headless-browser crawler developed by [UncleCode](https://x.com/unclecode). As required by the Crawl4AI license:
+
+> "This product includes software developed by UncleCode (https://x.com/unclecode) as part of the Crawl4AI project (https://github.com/unclecode/crawl4ai)."
+
+Full third-party license notices are in [NOTICE](NOTICE).
