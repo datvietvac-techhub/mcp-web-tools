@@ -4,11 +4,11 @@
 # Two ways to run:
 #
 #   1) One-liner (clones the repo, then bootstraps):
-#        curl -fsSL https://github.com/datvietvac-techhub/agent-web-tool-mcp/releases/latest/download/install.sh | bash
-#        curl -fsSL https://github.com/datvietvac-techhub/agent-web-tool-mcp/releases/latest/download/install.sh | bash -s -- --dir /opt/mcp-web-tool --pull
+#        curl -fsSL https://github.com/datvietvac-techhub/mcp-web-tools/releases/latest/download/install.sh | bash
+#        curl -fsSL https://github.com/datvietvac-techhub/mcp-web-tools/releases/latest/download/install.sh | bash -s -- --dir /opt/mcp-web-tool --pull
 #
 #   2) From an existing checkout:
-#        git clone https://github.com/datvietvac-techhub/agent-web-tool-mcp.git && cd agent-web-tool-mcp
+#        git clone https://github.com/datvietvac-techhub/mcp-web-tools.git && cd mcp-web-tools
 #        ./install.sh
 #
 # Bootstrap only — does NOT start containers. After this runs, use:
@@ -31,7 +31,7 @@
 
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/datvietvac-techhub/agent-web-tool-mcp.git}"
+REPO_URL="${REPO_URL:-https://github.com/datvietvac-techhub/mcp-web-tools.git}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
 
 # ── pretty output ─────────────────────────────────────────────────────────────

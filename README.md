@@ -1,131 +1,79 @@
-# mcp-web-tool
+# MCP Web Tools — Self-Hosted Web Search & Extraction MCP Server for AI Agents
 
-A single `docker compose` stack that gives AI agents two web tools over MCP — fully self-hosted, no third-party API keys.
+> Self-hosted Model Context Protocol (MCP) server giving AI agents free `web_search` and `web_extractor` tools — search via SearXNG, extract via Crawl4AI, no paid API keys.
 
-- **`web_search`** — web search via a self-hosted [SearXNG](https://docs.searxng.org/) metasearch instance.
-- **`web_extractor`** — fetch one or more URLs and return clean Markdown via [Crawl4AI](https://docs.crawl4ai.com/) (headless-browser crawler).
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/datvietvac-techhub/mcp-web-tools)](https://github.com/datvietvac-techhub/mcp-web-tools/commits/main)
+[![Stars](https://img.shields.io/github/stars/datvietvac-techhub/mcp-web-tools?style=social)](https://github.com/datvietvac-techhub/mcp-web-tools/stargazers)
+[![MCP Compatible](https://img.shields.io/badge/MCP-compatible-7c3aed)](https://modelcontextprotocol.io)
+[![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](mcp/Dockerfile)
 
-The MCP server is a thin [FastMCP](https://github.com/jlowin/fastmcp) wrapper that calls SearXNG and Crawl4AI over the internal Docker network, normalizes their output, and adds a small TTL cache on top of each service's own caching.
+> Previously known as **Agent Web Tool MCP** / [`agent-web-tool-mcp`](https://github.com/datvietvac-techhub/agent-web-tool-mcp). The repo was renamed to better match its purpose — GitHub redirects old URLs, so existing clones and links keep working.
 
----
+## TL;DR
 
-## Features
+**MCP Web Tools is a self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server that lets developers serve `web_search` and `web_extractor` to their AI agents locally — instead of paying per-query for [Brave Search API](https://brave.com/search/api/), [Tavily](https://tavily.com/), [Serper](https://serper.dev/), or Bing.** Search is backed by a self-hosted [SearXNG](https://docs.searxng.org/) metasearch instance aggregating ~70 engines; extraction is backed by [Crawl4AI](https://docs.crawl4ai.com/), which fetches pages with a headless Chromium and returns clean Markdown. The stack runs as a single `docker compose up` (FastMCP + SearXNG + Crawl4AI + Valkey), works with Claude Code / Cursor / any MCP client, and is Apache-2.0 licensed.
 
-- **Two MCP tools out of the box** — `web_search` (SearXNG-backed) and `web_extractor` (Crawl4AI-backed, returns Markdown), exposed at `http://<host>:${MCP_PORT}/mcp`.
-- **Self-hosted, no API keys** — SearXNG aggregates ~70 search engines; Crawl4AI uses a bundled headless Chromium. Nothing leaves your network unless the underlying services fetch it.
-- **One-command install** — `curl … | bash` clones the repo, checks prerequisites, generates secrets, and prints next steps. Idempotent and safe to re-run.
-- **Transport flexible** — Streamable HTTP by default (`MCP_TRANSPORT=http`) for remote/multi-agent use, or stdio (`MCP_TRANSPORT=stdio`) for a single local client.
-- **Layered caching** — Valkey backs SearXNG's limiter/cache; the MCP layer adds an in-process TTL cache (`MCP_CACHE_TTL`, `EXTRACT_CACHE_TTL`) on top.
-- **Parallel extraction** — `web_extractor` fans out up to `MAX_CONCURRENCY` (default `5`) URLs per call, preserves input order, returns per-URL status.
-- **FastAPI dev playground** — `make playground` boots a one-shot FastAPI app off the same image that imports the exact tool impls (`POST /search`, `POST /extract`, Swagger at `/docs`). Lets you exercise the tools from `curl` without an MCP client.
-- **Pinnable images** — `VALKEY_IMAGE`, `SEARXNG_IMAGE`, `CRAWL4AI_IMAGE` in `.env` for reproducible deploys.
-- **Convenience `make` targets** — `make up | down | logs | ps | smoke | playground | clean`.
+## Why self-host MCP Web Tools?
 
----
+- **Free per-query**: replace Brave Search API, Tavily API, Serper, or Bing keys (each paid per query) with a SearXNG + Crawl4AI stack you control.
+- **Private by default**: agent queries never leave your network — only the underlying SearXNG / Crawl4AI fetches do. No SaaS provider sees your prompts or URLs.
+- **One `docker compose up`**: runs on a dev laptop, a shared internal box, or a VM. No SaaS account, no rotating API keys, no rate-limit dashboards.
+- **Reproducible**: pin `VALKEY_IMAGE`, `SEARXNG_IMAGE`, `CRAWL4AI_IMAGE` in `.env` for byte-identical redeploys.
+- **Standard MCP surface**: works unchanged with Claude Code, Cursor, Hermes, or any [MCP-compatible](https://modelcontextprotocol.io) client.
 
-## How to Use
+## What is MCP Web Tools?
 
-### Requirements
+**MCP Web Tools is a self-hosted MCP server that exposes two web tools — `web_search` (SearXNG-backed) and `web_extractor` (Crawl4AI-backed) — so developers can serve search and web-content extraction to AI agents locally instead of paying for Brave Search API, Tavily API, or Serper.**
 
-- Docker Engine + `docker compose` v2 plugin
-- `git` (for the curl-pipe installer)
-- Free host ports `8080` (SearXNG), `11235` (Crawl4AI), `8000` (MCP) — `install.sh` warns about conflicts.
+The MCP server is a thin [FastMCP](https://github.com/jlowin/fastmcp) wrapper that calls SearXNG and Crawl4AI over the internal Docker network, normalizes their output, and adds a small TTL cache on top of each service's own caching. Agents only ever talk to the MCP server; the upstream services are internal.
 
-### Install — one-liner (recommended)
+**Use it when you need:**
 
-```bash
-curl -fsSL https://github.com/datvietvac-techhub/agent-web-tool-mcp/releases/latest/download/install.sh | bash
-```
+- Agent web access without paying per-query for SaaS search APIs.
+- Markdown extraction from arbitrary URLs (for RAG ingestion, summarization, agentic browsing, web scraping).
+- A self-hostable, auditable web-tool layer that does not leak agent prompts to a third-party.
+- A drop-in MCP server for Claude Code, Cursor, or any MCP-compatible client.
 
-The script clones the repo to `~/.local/share/mcp-web-tool` (override with `--dir <path>`), runs prerequisite checks, creates `.env`, and generates a random `SEARXNG_SECRET`. It does **not** start containers — that's `make up`.
+**Features:**
 
-Forward flags after `--`:
+- Two MCP tools out of the box — `web_search` (SearXNG-backed, ~70 engines) and `web_extractor` (Crawl4AI-backed, returns Markdown), exposed at `http://<host>:${MCP_PORT}/mcp`.
+- Self-hosted, no API keys — nothing leaves your network except the underlying SearXNG / Crawl4AI fetches.
+- Transport flexible — Streamable HTTP (`MCP_TRANSPORT=http`) for remote/multi-agent, or stdio (`MCP_TRANSPORT=stdio`) for a single local client.
+- Layered caching — Valkey backs SearXNG's limiter/cache; the MCP layer adds an in-process TTL cache on top.
+- Parallel extraction — `web_extractor` fans out up to `MAX_CONCURRENCY` URLs per call, preserves input order, returns per-URL status.
+- FastAPI dev playground — `make playground` boots a one-shot FastAPI app off the same image (`POST /search`, `POST /extract`, Swagger at `/docs`).
+- Pinnable images — `VALKEY_IMAGE`, `SEARXNG_IMAGE`, `CRAWL4AI_IMAGE` in `.env` for reproducible deploys.
 
-```bash
-curl -fsSL https://github.com/datvietvac-techhub/agent-web-tool-mcp/releases/latest/download/install.sh \
-  | bash -s -- --dir /opt/mcp-web-tool --pull
-```
+## How to install the MCP server for Claude Code
 
-Pin to a specific release by swapping `latest` for a tag (e.g. `v1`):
+**Requirements:** Docker Engine + `docker compose` v2, `git`, and a free host port `8000` (MCP). SearXNG and Crawl4AI stay on the internal Docker network by default.
 
-```bash
-curl -fsSL https://github.com/datvietvac-techhub/agent-web-tool-mcp/releases/download/v1/install.sh | bash
-```
-
-| flag | purpose |
-|---|---|
-| `--dir <path>` | target dir for the clone (default `~/.local/share/mcp-web-tool`) |
-| `--pull` | `docker compose pull` upstream images right after bootstrap |
-| `--skip-checks` | skip port / daemon prerequisite checks |
-| `-h, --help` | show help |
-
-If `docker` needs `sudo` on your box, prefix with `sudo`, or add yourself to the `docker` group:
+**1. One-liner install** (clones the repo, generates secrets, prints next steps):
 
 ```bash
-sudo usermod -aG docker "$USER" && newgrp docker
+curl -fsSL https://github.com/datvietvac-techhub/mcp-web-tools/releases/latest/download/install.sh | bash
 ```
 
-### Install — manual clone
+The script clones to `~/.local/share/mcp-web-tool` (override with `--dir <path>`), creates `.env`, and generates a random `SEARXNG_SECRET`. It does **not** start containers — that's `make up`.
+
+**2. Start the stack:**
 
 ```bash
-git clone https://github.com/datvietvac-techhub/agent-web-tool-mcp.git
-cd agent-web-tool-mcp
-./install.sh        # bootstrap only
-make up             # start the stack
-make smoke          # verify endpoints
+cd ~/.local/share/mcp-web-tool
+make up      # docker compose up -d
+make smoke   # verify MCP plus internal SearXNG/Crawl4AI endpoints
 ```
 
-`make install` is the all-in-one equivalent: bootstrap + `compose up -d --build` + smoke. First `make up` pulls the Crawl4AI image (~GB, includes Chromium) — budget a couple of minutes.
+First `make up` pulls the Crawl4AI image (~GB, includes Chromium) — budget a couple of minutes.
 
-### Manual install (no script)
-
-```bash
-cp .env.example .env
-echo "SEARXNG_SECRET=$(openssl rand -hex 32)" >> .env
-docker compose up -d --build
-docker compose ps        # wait until searxng + crawl4ai are "healthy"
-```
-
-### Day-to-day (`make`)
-
-```
-make bootstrap   # ./install.sh only (prereqs, .env, secret) — no compose up
-make install     # one-shot: bootstrap + up + smoke (forward flags with ARGS="--pull")
-make up          # start              make down     # stop (keeps cache volume)
-make restart     # restart            make ps       # status
-make logs        # tail logs          make smoke    # re-run endpoint smoke tests
-make build       # rebuild web-mcp    make pull     # refresh upstream images
-make playground  # run the FastAPI dev API (alias: make play)
-make secret      # print a fresh SEARXNG_SECRET value
-make clean       # stop + remove the valkey cache volume
-```
-
-### Smoke tests
-
-```bash
-# SearXNG JSON API
-curl -s "http://localhost:8080/search?q=anthropic+claude&format=json" | jq '.results[0]'
-
-# Crawl4AI markdown endpoint
-curl -s -X POST http://localhost:11235/md \
-  -H 'Content-Type: application/json' \
-  -d '{"url":"https://example.com","f":"fit"}' | jq '.markdown'
-
-# MCP server: inspect tools
-npx @modelcontextprotocol/inspector       # then connect to http://localhost:${MCP_PORT:-8000}/mcp
-```
-
-### Connect an agent
-
-The MCP server listens on `http://<host>:${MCP_PORT}/mcp` (Streamable HTTP) — `MCP_PORT` defaults to `8000`.
-
-Claude Code:
+**3. Connect Claude Code** (or any MCP client) to `http://localhost:8000/mcp`:
 
 ```bash
 claude mcp add --transport http web-tool http://localhost:8000/mcp
 ```
 
-Any MCP client config (Hermes, etc.):
+For other clients (Cursor, Hermes, etc.):
 
 ```json
 {
@@ -135,29 +83,32 @@ Any MCP client config (Hermes, etc.):
 }
 ```
 
-For a single local client launching the server as a subprocess, set `MCP_TRANSPORT=stdio` in `.env` and point the client at `python mcp/server.py` (or `docker compose run`).
+For a single local client launching the server as a subprocess, set `MCP_TRANSPORT=stdio` in `.env` and point the client at `python mcp/server.py`.
 
-### MCP tools
+See [docs/install.md](docs/install.md) for manual install, `make` targets, smoke tests, and stdio configuration.
 
-Tool impls live in [`mcp/tools.py`](mcp/tools.py) and are shared with the dev playground.
+## How does the web_search tool work (SearXNG)?
 
-#### `web_search`
+`web_search` is an MCP tool that queries a self-hosted SearXNG metasearch instance (aggregating ~70 search engines including Google, Bing, DuckDuckGo, Brave, Wikipedia) and returns ranked, de-duplicated results to the agent. Results are normalized to a stable JSON shape, cached in-process for `MCP_CACHE_TTL` seconds (default `300`), and clamped to `1..50` per call.
 
-| param | type | default | notes |
-|---|---|---|---|
-| `query` | string | required | search query |
-| `num_results` | int | `10` | clamped to `1..50` |
-| `categories` | string | `"general"` | SearXNG category: `general`, `news`, `science`, `it`, `images`, … |
-| `language` | string | `"auto"` | `"en"`, `"vi"`, …; `"auto"` lets SearXNG decide |
-| `time_range` | string \| null | `null` | `"day"`, `"week"`, `"month"`, `"year"` |
+```python
+# Tool signature (called by the MCP client / agent)
+web_search(
+    query: str,                  # search query
+    num_results: int = 10,       # clamped to 1..50
+    categories: str = "general", # "general" | "news" | "science" | "it" | "images" | ...
+    language: str = "auto",      # "en" | "vi" | ...; "auto" lets SearXNG decide
+    time_range: str | None = None,  # "day" | "week" | "month" | "year"
+)
+```
 
-Returns:
+Response shape:
 
 ```json
 {
   "query": "...",
   "results": [
-    { "title": "...", "url": "https://...", "snippet": "...", "engine": "...", "score": 1.0 }
+    {"title": "...", "url": "https://...", "snippet": "...", "engine": "...", "score": 1.0}
   ],
   "answers": [],
   "suggestions": ["..."],
@@ -165,18 +116,23 @@ Returns:
 }
 ```
 
-Results are de-duplicated by normalized URL and truncated to `num_results`. Cached in-process for `MCP_CACHE_TTL` seconds (default `300`). On failure the dict includes an `"error"` key and `"results": []`.
+On failure the dict includes an `"error"` key and `"results": []` — tools return errors as values, never raise. Full parameter reference and tuning knobs: [docs/config.md#web_search](docs/config.md#web_search).
 
-#### `web_extractor`
+## How does the web_extractor tool work (Crawl4AI)?
 
-| param | type | default | notes |
-|---|---|---|---|
-| `urls` | string \| list[string] | required | one URL or a list — max **20** per call |
-| `mode` | string | `"fit"` | `fit` (pruned main content), `raw` (full page), `bm25` / `llm` (relevance-filtered — requires `query`) |
-| `query` | string \| null | `null` | focus query for `bm25` / `llm` mode |
-| `bypass_cache` | bool | `false` | skip the local cache and ask Crawl4AI to re-fetch |
+`web_extractor` is an MCP tool that fetches one or more URLs via a self-hosted Crawl4AI service (headless Chromium) and returns clean Markdown — pruned to the main content by default. URLs are fetched in parallel up to `MAX_CONCURRENCY` (default `5`), max 20 URLs per call, with per-URL caching for `EXTRACT_CACHE_TTL` seconds (default `1800`).
 
-Returns:
+```python
+# Tool signature
+web_extractor(
+    urls: str | list[str],       # one URL or a list, max 20 per call
+    mode: str = "fit",           # "fit" | "raw" | "bm25" | "llm"
+    query: str | None = None,    # required for "bm25" / "llm" relevance filtering
+    bypass_cache: bool = False,  # force a re-fetch
+)
+```
+
+Response shape (order matches input URLs):
 
 ```json
 {
@@ -185,219 +141,56 @@ Returns:
       "url": "https://...",
       "status": "ok",
       "markdown": "# Heading\n...",
-      "word_count": 1234,
-      "error": "..."
+      "word_count": 1234
     }
   ]
 }
 ```
 
-Order matches the input URL list. URLs are fetched in parallel up to `MAX_CONCURRENCY`. Cached for `EXTRACT_CACHE_TTL` seconds (default `1800`).
+Per-URL failures surface as `{"status": "error", "error": "...", "markdown": ""}` without aborting the whole call. Full mode reference, tuning, and caching keys: [docs/config.md#web_extractor](docs/config.md#web_extractor).
 
-### Dev playground (FastAPI)
+## MCP Web Tools vs Brave Search MCP vs Tavily MCP
 
-Useful for poking the tools from `curl` without wiring up an MCP client. Not in `docker-compose.yml` — run on demand as a one-shot container off the existing `web-mcp` image (the main stack must already be up).
+A side-by-side of self-hosted MCP Web Tools against the two most common hosted alternatives most teams reach for first:
 
-```bash
-make up           # if not already running
-make playground   # alias: make play
-```
-
-Listens on `http://localhost:${PLAYGROUND_PORT}` (default `8001`). Ctrl-C stops it; container is removed automatically.
-
-| method | path | body | description |
+| | **MCP Web Tools (this project)** | Brave Search MCP | Tavily MCP |
 |---|---|---|---|
-| GET | `/healthz` | — | liveness probe → `{"ok": true}` |
-| POST | `/search` | `SearchReq` | calls `web_search_impl`, same shape as the MCP tool |
-| POST | `/extract` | `ExtractReq` | calls `web_extractor_impl`, same shape as the MCP tool |
+| Hosting | **Self-hosted** (Docker Compose) | Hosted SaaS API | Hosted SaaS API |
+| API key required | **None** | Brave Search API key | Tavily API key |
+| Web search | Yes (SearXNG, ~70 engines) | Yes (Brave index) | Yes (Tavily index) |
+| Page extraction → Markdown | Yes (Crawl4AI, headless Chromium) | No | Yes (Tavily Extract) |
+| Output format | JSON + Markdown | JSON | JSON + Markdown |
+| Cost | **$0** per query (your compute only) | Free tier + paid tiers | Free tier + paid tiers |
+| Data leaves your network | Only target sites; queries stay local | Yes — sent to Brave | Yes — sent to Tavily |
+| License | Apache-2.0 (open source) | Proprietary service | Proprietary service |
 
-Bodies mirror the tool signatures one-for-one. Swagger UI is auto-generated at `/docs`, ReDoc at `/redoc`.
+Pick MCP Web Tools if you want zero per-query cost, no vendor lock-in, full control over the search/crawl layer, and prompts that never hit a third-party SaaS. Pick Brave or Tavily if you don't want to run any infrastructure.
 
-> **Dev-only.** No auth, verbose errors, accepts arbitrary URLs. Don't expose `PLAYGROUND_PORT` publicly.
+## Documentation
 
-### Configuration
+Full docs are published on GitHub Pages: **https://datvietvac-techhub.github.io/mcp-web-tools/**
 
-Everything is set via `.env` (see [`.env.example`](.env.example)):
+- [Install guide](docs/install.md) — one-liner, manual clone, `make` targets, smoke tests, agent connect snippets.
+- [Configuration reference](docs/config.md) — every `.env` variable + full `web_search` / `web_extractor` parameter tables + dev playground.
+- [Architecture](docs/architecture.md) — service topology, request flow, Mermaid diagrams, gotchas.
+- [Changelog](CHANGELOG.md) — release notes (Keep a Changelog format).
 
-| var | default | purpose |
-|---|---|---|
-| `SEARXNG_SECRET` | _(required)_ | HMAC signing key for SearXNG — not an API key |
-| `CRAWL4AI_API_TOKEN` | _(empty)_ | optional bearer token if Crawl4AI is locked down |
-| `MCP_TRANSPORT` | `http` | `http` (streamable-http) or `stdio` (subprocess) |
-| `MCP_PORT` | `8000` | host port for the MCP server (also used for `make smoke`) |
-| `PLAYGROUND_PORT` | `8001` | host port for `make playground` |
-| `MCP_CACHE_TTL` | `300` | `web_search` cache TTL in seconds (`0` disables) |
-| `EXTRACT_CACHE_TTL` | `1800` | `web_extractor` cache TTL in seconds (`0` disables) |
-| `REQUEST_TIMEOUT` | `30` | SearXNG request timeout (s) |
-| `EXTRACT_TIMEOUT` | `60` | Crawl4AI request timeout (s) |
-| `MAX_CONCURRENCY` | `5` | parallel Crawl4AI requests per `web_extractor` call |
-| `VALKEY_IMAGE` / `SEARXNG_IMAGE` / `CRAWL4AI_IMAGE` | `:latest` | pin image versions for reproducible installs |
+For LLM ingestion / RAG indexing of this project, see [llms.txt](llms.txt) and [llms-full.txt](llms-full.txt).
 
-After changing `MCP_PORT`, run `make restart` (not just `up`) so the new host-port mapping takes effect.
+## Contributing
 
-`SEARXNG_SECRET` is **not** an API key — nothing sends it. SearXNG uses it server-side to sign image-proxy URLs (HMAC) and internal tokens; it just needs to be random and stable. `install.sh` generates it; the SearXNG container won't start without one.
+Bug reports, feature requests, and PRs are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev loop, coding conventions, and PR checklist. Security issues: see [SECURITY.md](SECURITY.md).
 
-Search quality is tuned in [`searxng/settings.yml`](searxng/settings.yml) (engines enabled, weights, categories) — restart the `searxng` service after editing.
+## License & Attributions
 
-### Stopping
+Licensed under the [Apache License, Version 2.0](LICENSE).
 
-```bash
-docker compose down            # keep the Valkey cache volume
-docker compose down -v         # also remove cached data
-make clean                     # equivalent to `down -v`
-```
-
----
-
-## Architecture
-
-Four services on a single bridge network (`web-tool-net`). Agents only ever talk to `web-mcp`; the other services are internal.
-
-```mermaid
-flowchart LR
-    Agent["AI Agent<br/>(MCP client)"]
-    subgraph stack [docker compose: web-tool-net]
-        WebMCP["web-mcp<br/>FastMCP server<br/>:${MCP_PORT:-8000}"]
-        SearXNG["searxng<br/>:8080"]
-        Crawl4AI["crawl4ai<br/>:11235<br/>shm_size 1g"]
-        Valkey["valkey<br/>cache / limiter<br/>(volume: valkey-data)"]
-    end
-    Internet[(Internet)]
-
-    Agent -->|"HTTP /mcp or stdio"| WebMCP
-    WebMCP -->|"web_search → /search?format=json"| SearXNG
-    WebMCP -->|"web_extractor → POST /md"| Crawl4AI
-    SearXNG --> Valkey
-    SearXNG -->|"metasearch (~70 engines)"| Internet
-    Crawl4AI -->|"headless Chromium fetch"| Internet
-```
-
-### Service responsibilities
-
-| service | image | port | role |
-|---|---|---|---|
-| `valkey` | `valkey/valkey:8-alpine` | — (internal) | cache + rate-limiter backend for SearXNG; data persisted to the `valkey-data` volume |
-| `searxng` | `searxng/searxng:latest` | `8080` | metasearch frontend; JSON API enabled; settings in `searxng/settings.yml` |
-| `crawl4ai` | `unclecode/crawl4ai:latest` | `11235` | headless-browser crawler; exposes `/md` and `/crawl`; `shm_size: 1g` avoids Chromium crashes |
-| `web-mcp` | built from [`mcp/Dockerfile`](mcp/Dockerfile) | `${MCP_PORT:-8000}` | FastMCP server; tool impls in [`mcp/tools.py`](mcp/tools.py); shared with the FastAPI playground |
-
-On demand (not in compose), `make playground` runs the same `web-mcp` image with [`mcp/playground.py`](mcp/playground.py) as entrypoint, joining `web-tool-net` via `compose run` so it reaches `searxng` and `crawl4ai` by service name.
-
-### Request flow
-
-```mermaid
-sequenceDiagram
-    participant A as Agent
-    participant M as web-mcp (FastMCP)
-    participant Cache as in-process TTL cache
-    participant S as searxng
-    participant C as crawl4ai
-
-    A->>M: web_search(query, ...)
-    M->>Cache: lookup (MCP_CACHE_TTL)
-    alt cache hit
-        Cache-->>M: cached result
-    else miss
-        M->>S: GET /search?format=json
-        S-->>M: results
-        M->>Cache: store
-    end
-    M-->>A: normalized JSON
-
-    A->>M: web_extractor(urls, ...)
-    M->>Cache: per-URL lookup (EXTRACT_CACHE_TTL)
-    M->>C: POST /md (parallel, ≤ MAX_CONCURRENCY)
-    C-->>M: markdown per URL
-    M->>Cache: store per-URL
-    M-->>A: ordered results[]
-```
-
-### Notes / gotchas
-
-- **SearXNG JSON API must be enabled** — `searxng/settings.yml` already lists `json` under `search.formats`. Without it the API returns `403`.
-- **`SEARXNG_SECRET` is required** — the SearXNG container fails to start without it; compose errors out early if unset.
-- **Limiter is disabled** (`limiter: false`) because the instance is only reachable inside the compose network. Enable and configure it if you ever expose `8080` publicly.
-- **Pin the Crawl4AI image in production** — set `CRAWL4AI_IMAGE=unclecode/crawl4ai:<version>` in `.env`; its `/md` request shape has shifted between releases. If `web_extractor` ever returns empty markdown, check `http://localhost:11235/playground` to see the current request shape.
-- **`shm_size: 1g`** on the `crawl4ai` service avoids Chromium crashes on large pages.
-
----
-
-## How to Contribute
-
-### Project layout
-
-```
-.
-├── docker-compose.yml      # 4-service stack
-├── install.sh              # bootstrap (curl-pipe + in-repo modes)
-├── Makefile                # make up/down/logs/playground/smoke/...
-├── .env.example            # all tunables, copied to .env by install.sh
-├── mcp/                    # the only service we build
-│   ├── Dockerfile
-│   ├── server.py           # FastMCP entrypoint, registers tools
-│   ├── tools.py            # web_search_impl + web_extractor_impl (shared)
-│   ├── playground.py       # FastAPI dev app (re-uses tools.py)
-│   └── requirements.txt
-├── searxng/
-│   └── settings.yml        # engines, categories, formats, limiter
-└── docs/
-```
-
-### Local dev loop
-
-```bash
-git clone https://github.com/datvietvac-techhub/agent-web-tool-mcp.git
-cd agent-web-tool-mcp
-./install.sh                         # one-time
-make up                              # start the stack
-make playground                      # iterate against POST /search, POST /extract
-
-# after editing mcp/*.py:
-make build && make restart           # rebuild the web-mcp image and restart
-make logs                            # tail all services
-```
-
-For pure tool-impl changes you can also run `mcp/playground.py` directly against the running stack — it imports the same `web_search_impl` / `web_extractor_impl`, so behavior matches the MCP server exactly.
-
-### Coding conventions
-
-- **Python**: target the version pinned in [`mcp/Dockerfile`](mcp/Dockerfile). Keep tool impls (`mcp/tools.py`) free of MCP- or FastAPI-specific imports so both `server.py` and `playground.py` can share them.
-- **Tool contracts are stable** — return shapes for `web_search` / `web_extractor` are part of the public surface; bump the README table when you change them.
-- **Failures are values, not exceptions** — both tools return a dict with an `error` field on failure (and `results: []` / `status: "error"` per URL). Don't raise from tool entrypoints.
-- **Caching keys** must include every input that affects the response (query, categories, language, time_range, mode, query for bm25/llm, etc.).
-- **Shell scripts** are bash-only, `set -euo pipefail`, and must stay idempotent. Test both in-repo and curl-pipe paths when touching `install.sh`.
-- **Compose**: don't add new host-port bindings without an env-var default and a note in `.env.example` + the config table.
-
-### Submitting changes
-
-1. Fork and create a feature branch off `main`.
-2. Run `make build && make restart && make smoke` before pushing — all three endpoints must return `ok` / `2xx`.
-3. If your change touches a tool's request/response shape, update both the README table and any clients you know of.
-4. Open a PR with:
-   - what changed and why (one paragraph is fine),
-   - `make smoke` output, or a manual `curl` against the relevant endpoint,
-   - any new env vars added to `.env.example`.
-5. Avoid drive-by reformatting; keep diffs focused.
-
-### Reporting issues
-
-When filing a bug, include:
-
-- output of `docker compose ps` and `docker compose version`,
-- relevant logs: `make logs` (or `docker compose logs <service>`),
-- `.env` with `SEARXNG_SECRET` and `CRAWL4AI_API_TOKEN` redacted,
-- exact tool call (params) and the response you got.
-
----
-
-## License
-
-This project is licensed under the [Apache License, Version 2.0](LICENSE).
-
-## Attributions
-
-**Crawl4AI** — the `web_extractor` tool is powered by [Crawl4AI](https://github.com/unclecode/crawl4ai), a headless-browser crawler developed by [UncleCode](https://x.com/unclecode). As required by the Crawl4AI license:
+The `web_extractor` tool is powered by [Crawl4AI](https://github.com/unclecode/crawl4ai), a headless-browser crawler developed by [UncleCode](https://x.com/unclecode). As required by the Crawl4AI license:
 
 > "This product includes software developed by UncleCode (https://x.com/unclecode) as part of the Crawl4AI project (https://github.com/unclecode/crawl4ai)."
 
-Full third-party license notices are in [NOTICE](NOTICE).
+Full third-party notices: [NOTICE](NOTICE).
+
+---
+
+_Project: **MCP Web Tools** (repo: `mcp-web-tools`, formerly `agent-web-tool-mcp`) · Version: 1.0.0 · Updated: 2026-05_

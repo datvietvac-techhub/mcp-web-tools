@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "MCP Web Tools",
+    "alternateName": [
+      "mcp-web-tools",
+      "Agent Web Tool MCP",
+      "agent-web-tool-mcp"
+    ],
+    "description": "Self-hosted Model Context Protocol (MCP) server giving AI agents free web_search and web_extractor tools — search via SearXNG, extract via Crawl4AI, no paid API keys.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Docker (Linux, macOS, Windows)",
+    "softwareVersion": "1.0.0",
+    "license": "https://www.apache.org/licenses/LICENSE-2.0",
+    "codeRepository": "https://github.com/datvietvac-techhub/mcp-web-tools",
+    "url": "https://datvietvac-techhub.github.io/mcp-web-tools/",
+    "downloadUrl": "https://github.com/datvietvac-techhub/mcp-web-tools/releases/latest",
+    "programmingLanguage": "Python",
+    "runtimePlatform": "Docker Compose",
+    "author": {
+      "@type": "Organization",
+      "name": "datvietvac-techhub",
+      "url": "https://github.com/datvietvac-techhub"
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "keywords": [
+      "MCP server",
+      "Model Context Protocol",
+      "MCP Web Tools",
+      "web search",
+      "web scraping",
+      "web content extraction",
+      "SearXNG",
+      "Crawl4AI",
+      "FastMCP",
+      "Claude Code MCP",
+      "Cursor MCP",
+      "self-hosted",
+      "no API key",
+      "open source",
+      "RAG",
+      "AI agents",
+      "alternative to Brave Search API",
+      "alternative to Tavily API",
+      "alternative to Serper"
+    ],
+    "featureList": [
+      "Self-hosted Model Context Protocol (MCP) server",
+      "web_search tool backed by SearXNG (~70 engines)",
+      "web_extractor tool backed by Crawl4AI (Markdown output)",
+      "No third-party API key required",
+      "Docker Compose deployment",
+      "Streamable HTTP and stdio MCP transports"
+    ]
+  }
+  </script>
+{% endblock %}

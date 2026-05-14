@@ -1,0 +1,75 @@
+site_name: MCP Web Tools
+site_description: Self-hosted Model Context Protocol (MCP) server giving AI agents free web_search and web_extractor tools — search via SearXNG, extract via Crawl4AI, no paid API keys.
+site_url: https://datvietvac-techhub.github.io/mcp-web-tools/
+repo_url: https://github.com/datvietvac-techhub/mcp-web-tools
+repo_name: datvietvac-techhub/mcp-web-tools
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  language: en
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+    - content.action.view
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Install: install.md
+  - Configuration: config.md
+  - Architecture: architecture.md
+  - Changelog: changelog.md
+  - LLM Index: llms.txt
+  - Full LLM Context: llms-full.txt
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - .
+        - docs
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+  - include-markdown
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/datvietvac-techhub/mcp-web-tools
+
+extra_css: []
+
+copyright: Copyright &copy; 2026 datvietvac-techhub

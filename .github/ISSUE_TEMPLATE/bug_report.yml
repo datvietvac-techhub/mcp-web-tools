@@ -1,0 +1,80 @@
+name: Bug report
+description: Report a reproducible problem with MCP Web Tools.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough runtime context for maintainers to reproduce it.
+        Do not paste secrets. Redact `SEARXNG_SECRET`, `CRAWL4AI_API_TOKEN`, and any private URLs.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+      placeholder: "web_extractor returned empty markdown for ..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact tool call or curl command.
+      placeholder: |
+        1. Run `make up`
+        2. Call `web_search` with ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: tool_call
+    attributes:
+      label: Exact tool call and response
+      description: Paste JSON params and response. Redact private URLs or tokens.
+      render: json
+    validations:
+      required: false
+  - type: textarea
+    id: compose_status
+    attributes:
+      label: Docker / Compose status
+      description: Paste `docker compose ps` and `docker compose version`.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste `make logs` output or `docker compose logs <service>` output.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Paste `.env` with secrets redacted.
+      render: shell
+      placeholder: |
+        MCP_TRANSPORT=http
+        MCP_PORT=8000
+        SEARXNG_SECRET=<redacted>
+        CRAWL4AI_API_TOKEN=<redacted>
+    validations:
+      required: false
+  - type: dropdown
+    id: service
+    attributes:
+      label: Affected service
+      options:
+        - web-mcp
+        - searxng
+        - crawl4ai
+        - valkey
+        - install.sh
+        - docs
+        - unknown
+    validations:
+      required: true

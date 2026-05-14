@@ -2,20 +2,46 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Security fixes are provided for the latest tagged release and the `main` branch.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| Version | Supported |
+|---|---|
+| `main` | Yes |
+| `1.x` | Yes |
+| `< 1.0.0` | No |
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Do **not** open a public GitHub issue for security vulnerabilities.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Report vulnerabilities through [GitHub Security Advisories](https://github.com/datvietvac-techhub/mcp-web-tools/security/advisories/new). Include:
+
+- affected version or commit SHA,
+- deployment mode (`http` or `stdio` transport),
+- relevant Docker Compose configuration with secrets redacted,
+- steps to reproduce,
+- observed impact,
+- any known mitigation or workaround.
+
+We will acknowledge valid reports as soon as possible, investigate privately, and publish a fix or advisory when appropriate.
+
+## Deployment Notes
+
+By default, only the MCP server is published to the host; SearXNG, Crawl4AI, and Valkey stay on the Docker network. If you expose the MCP endpoint outside a trusted local environment, put it behind your own access control such as a VPN, firewall rule, or authenticated reverse proxy.
+
+`web_extractor` performs lightweight URL validation before forwarding requests to Crawl4AI. Crawl4AI domain/link filters are useful for crawl behavior, but they are not treated as this project's SSRF protection boundary.
+
+## Scope
+
+In scope:
+
+- vulnerabilities in the `web-mcp` FastMCP server,
+- unsafe request handling in `web_search` or `web_extractor`,
+- secret leakage in install, compose, logging, or docs,
+- container configuration issues that expose internal services unexpectedly.
+
+Out of scope:
+
+- vulnerabilities in upstream SearXNG, Crawl4AI, Valkey, Docker, or Python dependencies unless this repo's configuration makes them exploitable in a new way,
+- denial-of-service against a publicly exposed SearXNG or Crawl4AI instance that was intentionally exposed outside the compose network,
+- reports that require access to a user's private deployment without authorization.
