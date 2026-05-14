@@ -1,0 +1,2 @@
+-r mcp/requirements.txt
+pytest>=8
