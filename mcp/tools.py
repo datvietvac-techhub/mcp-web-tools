@@ -92,8 +92,8 @@ async def web_search_impl(
             "error": f"searxng returned HTTP {e.response.status_code} "
             f"(is the 'json' format enabled in searxng/settings.yml?)",
         }
-    except Exception as e:  # noqa: BLE001 - surface any transport/parse error to the agent
-        return {"query": query, "results": [], "error": f"searxng request failed: {e}"}
+    except Exception:  # noqa: BLE001 - keep broad handling, but do not expose internals to clients
+        return {"query": query, "results": [], "error": "searxng request failed"}
 
     seen: set[str] = set()
     results: list[dict] = []
