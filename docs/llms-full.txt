@@ -1,0 +1,178 @@
+# MCP Web Tools — Self-Hosted Web Search & Extraction MCP Server for AI Agents
+
+Self-hosted Model Context Protocol (MCP) server giving AI agents free `web_search` and `web_extractor` tools — search via SearXNG, extract via Crawl4AI, no paid API keys.
+
+Version: 1.0.0
+Last updated: 2026-05
+Repository: https://github.com/datvietvac-techhub/mcp-web-tools
+Documentation: https://datvietvac-techhub.github.io/mcp-web-tools/
+Previous names: agent-web-tool-mcp, Agent Web Tool MCP
+License: Apache-2.0
+
+## Summary
+
+MCP Web Tools is a self-hosted Model Context Protocol (MCP) server that lets developers serve two web tools — `web_search` and `web_extractor` — to their AI agents locally, instead of paying per-query for Brave Search API, Tavily, Serper, or Bing. `web_search` is powered by a self-hosted SearXNG metasearch instance aggregating about 70 engines. `web_extractor` is powered by Crawl4AI and returns clean Markdown from web pages. The server is implemented with FastMCP and runs as a Docker Compose stack with SearXNG, Crawl4AI, Valkey, and the MCP server itself. It requires no Brave, Tavily, Serper, Bing, or other third-party API keys.
+
+## Why self-host
+
+Self-hosted MCP Web Tools replaces paid per-query SaaS search APIs with infrastructure you control. Agent prompts and URLs never leave your network — only the underlying SearXNG metasearch and Crawl4AI fetches do. The whole stack is one `docker compose up` on a dev laptop, internal VM, or shared box; pin upstream images (`VALKEY_IMAGE`, `SEARXNG_IMAGE`, `CRAWL4AI_IMAGE`) for reproducible deploys. The MCP surface is standard, so the same instance serves Claude Code, Cursor, Hermes, or any MCP-compatible client without code changes.
+
+## Core features
+
+- Self-hosted MCP server for Claude Code, Cursor, and other MCP-compatible clients.
+- Two tools: `web_search` and `web_extractor`.
+- Search backend: SearXNG, self-hosted metasearch (~70 engines).
+- Extraction backend: Crawl4AI, headless Chromium, Markdown output.
+- Server framework: FastMCP.
+- Deployment: Docker Compose.
+- Cache: Valkey for SearXNG, in-process TTL caches for MCP tool responses.
+- Transport: Streamable HTTP by default, stdio optional.
+- Cost: zero per-query SaaS cost; only local infrastructure cost.
+- API keys: none required for web search or extraction.
+
+## Install quickstart
+
+```bash
+curl -fsSL https://github.com/datvietvac-techhub/mcp-web-tools/releases/latest/download/install.sh | bash
+cd ~/.local/share/mcp-web-tool
+make up
+make smoke
+claude mcp add --transport http web-tool http://localhost:8000/mcp
+```
+
+Requirements: Docker Engine, Docker Compose v2, git, and a free host port 8000 for the MCP server. SearXNG and Crawl4AI are internal Docker services by default.
+
+## MCP client config
+
+```json
+{
+  "mcpServers": {
+    "web-tool": { "transport": "http", "url": "http://localhost:8000/mcp" }
+  }
+}
+```
+
+## web_search
+
+`web_search` is an MCP tool that queries a self-hosted SearXNG metasearch instance and returns ranked, de-duplicated JSON results.
+
+Signature:
+
+```python
+web_search(
+    query: str,
+    num_results: int = 10,
+    categories: str = "general",
+    language: str = "auto",
+    time_range: str | None = None,
+) -> dict
+```
+
+Parameters:
+
+- `query`: required search query.
+- `num_results`: max results, clamped to 1..50, default 10.
+- `categories`: SearXNG category such as general, news, science, it, images.
+- `language`: language code such as en or vi; auto lets SearXNG decide.
+- `time_range`: optional recency filter: day, week, month, year.
+
+Return shape:
+
+```json
+{
+  "query": "...",
+  "results": [
+    { "title": "...", "url": "https://...", "snippet": "...", "engine": "...", "score": 1.0 }
+  ],
+  "answers": [],
+  "suggestions": ["..."],
+  "number_of_results": 12345
+}
+```
+
+Failure shape: includes an `error` key and `results: []`.
+
+## web_extractor
+
+`web_extractor` is an MCP tool that fetches one or more URLs via Crawl4AI and returns clean Markdown.
+
+Signature:
+
+```python
+web_extractor(
+    urls: str | list[str],
+    mode: str = "fit",
+    query: str | None = None,
+    bypass_cache: bool = False,
+) -> dict
+```
+
+Parameters:
+
+- `urls`: one URL or list of URLs, max 20 per call.
+- `mode`: fit, raw, bm25, or llm.
+- `query`: focus query required for bm25 or llm modes.
+- `bypass_cache`: skip local cache and ask Crawl4AI to re-fetch.
+
+Return shape:
+
+```json
+{
+  "results": [
+    {
+      "url": "https://...",
+      "status": "ok",
+      "markdown": "# Heading\n...",
+      "word_count": 1234,
+      "error": "..."
+    }
+  ]
+}
+```
+
+Order matches input URL list. Per-URL failures return `status: "error"` and do not abort the whole batch. URLs must use `http` or `https`; deeper SSRF hardening is intentionally separated into `mcp/url_policy.py` for future optional controls.
+
+## Environment variables
+
+- `SEARXNG_SECRET`: required HMAC signing key for SearXNG, not an API key.
+- `CRAWL4AI_API_TOKEN`: optional bearer token for Crawl4AI.
+- `MCP_TRANSPORT`: http or stdio, default http.
+- `MCP_PORT`: host port for MCP server, default 8000.
+- `PLAYGROUND_PORT`: host port for FastAPI dev playground, default 8001.
+- `MCP_CACHE_TTL`: web_search cache TTL seconds, default 300.
+- `EXTRACT_CACHE_TTL`: web_extractor cache TTL seconds, default 1800.
+- `REQUEST_TIMEOUT`: SearXNG request timeout seconds, default 30.
+- `EXTRACT_TIMEOUT`: Crawl4AI request timeout seconds, default 60.
+- `MAX_CONCURRENCY`: parallel Crawl4AI requests per call, default 5.
+- `VALKEY_IMAGE`, `SEARXNG_IMAGE`, `CRAWL4AI_IMAGE`: image tags for reproducible deploys.
+
+## Architecture
+
+Four services run on a single Docker bridge network named `web-tool-net` (the network and service names retain the project's previous slug for deployment compatibility).
+
+- `web-mcp`: FastMCP server, host port `${MCP_PORT:-8000}`, exposes `/mcp`.
+- `searxng`: internal metasearch frontend on port 8080, JSON API enabled.
+- `crawl4ai`: internal headless-browser crawler on port 11235, exposes `/md` and `/crawl`, uses `shm_size: 1g`.
+- `valkey`: internal cache / limiter backend for SearXNG, persisted in the `valkey-data` volume.
+
+Request flow:
+
+1. Agent calls MCP server over HTTP `/mcp` or stdio.
+2. For `web_search`, the MCP server checks in-process cache, then calls SearXNG `/search?format=json`, stores normalized JSON, returns to agent.
+3. For `web_extractor`, the MCP server checks per-URL cache, then calls Crawl4AI `/md` in parallel up to `MAX_CONCURRENCY`, stores Markdown per URL, returns ordered results.
+
+## Comparison
+
+MCP Web Tools is self-hosted, requires no API key, outputs JSON and Markdown, and costs $0 per query (your compute only). Brave Search MCP and Tavily MCP use hosted SaaS APIs, require API keys, send queries to a third-party service, and meter usage on free/paid tiers. Pick MCP Web Tools when zero per-query cost, no vendor lock-in, and query privacy matter; pick Brave or Tavily when you don't want to run infrastructure.
+
+## Links
+
+- README: https://github.com/datvietvac-techhub/mcp-web-tools#readme
+- Install: https://datvietvac-techhub.github.io/mcp-web-tools/install/
+- Configuration: https://datvietvac-techhub.github.io/mcp-web-tools/config/
+- Architecture: https://datvietvac-techhub.github.io/mcp-web-tools/architecture/
+- Changelog: https://github.com/datvietvac-techhub/mcp-web-tools/blob/main/CHANGELOG.md
+- Contributing: https://github.com/datvietvac-techhub/mcp-web-tools/blob/main/CONTRIBUTING.md
+- Security: https://github.com/datvietvac-techhub/mcp-web-tools/blob/main/SECURITY.md
+- License: https://github.com/datvietvac-techhub/mcp-web-tools/blob/main/LICENSE
+- Notices: https://github.com/datvietvac-techhub/mcp-web-tools/blob/main/NOTICE

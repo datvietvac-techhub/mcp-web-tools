@@ -1,0 +1,29 @@
+# MCP Web Tools
+
+> Self-hosted Model Context Protocol (MCP) server giving AI agents free web_search and web_extractor tools — search via SearXNG, extract via Crawl4AI, no paid API keys.
+
+MCP Web Tools is a self-hosted MCP server that lets developers serve `web_search` (SearXNG-backed metasearch across ~70 engines) and `web_extractor` (Crawl4AI-backed page-to-Markdown extraction) to their AI agents locally — instead of paying per-query for Brave Search API, Tavily, Serper, or Bing. The stack is built on FastMCP and runs as a 4-service Docker Compose deployment. It targets Claude Code, Cursor, RAG ingestion, and agentic web browsing where operators want self-hosting, no third-party API keys, and zero per-query SaaS cost. Previous names: `agent-web-tool-mcp`, "Agent Web Tool MCP".
+
+## Docs
+
+- [README](https://github.com/datvietvac-techhub/mcp-web-tools#readme): project overview, TL;DR, why self-host, install, tool definitions, comparison table.
+- [Documentation site](https://datvietvac-techhub.github.io/mcp-web-tools/): canonical docs landing page.
+- [Install guide](https://datvietvac-techhub.github.io/mcp-web-tools/install/): one-liner installer, manual clone, Make targets, smoke tests, MCP client config.
+- [Configuration reference](https://datvietvac-techhub.github.io/mcp-web-tools/config/): `.env` variables, `web_search` params, `web_extractor` params, dev playground.
+- [Architecture](https://datvietvac-techhub.github.io/mcp-web-tools/architecture/): Docker Compose topology, FastMCP/SearXNG/Crawl4AI/Valkey responsibilities, request flow.
+- [Changelog](https://github.com/datvietvac-techhub/mcp-web-tools/blob/main/CHANGELOG.md): release notes in Keep a Changelog format.
+
+## Examples
+
+- [Why self-host MCP Web Tools?](https://github.com/datvietvac-techhub/mcp-web-tools#why-self-host-mcp-web-tools)
+- [Install the MCP server for Claude Code](https://github.com/datvietvac-techhub/mcp-web-tools#how-to-install-the-mcp-server-for-claude-code)
+- [How web_search works (SearXNG)](https://github.com/datvietvac-techhub/mcp-web-tools#how-does-the-web_search-tool-work-searxng)
+- [How web_extractor works (Crawl4AI)](https://github.com/datvietvac-techhub/mcp-web-tools#how-does-the-web_extractor-tool-work-crawl4ai)
+- [Comparison: MCP Web Tools vs Brave Search MCP vs Tavily MCP](https://github.com/datvietvac-techhub/mcp-web-tools#mcp-web-tools-vs-brave-search-mcp-vs-tavily-mcp)
+
+## Optional
+
+- [Contributing](https://github.com/datvietvac-techhub/mcp-web-tools/blob/main/CONTRIBUTING.md): dev loop, coding conventions, PR checklist, bug report checklist.
+- [Security Policy](https://github.com/datvietvac-techhub/mcp-web-tools/blob/main/SECURITY.md): supported versions and vulnerability reporting.
+- [License](https://github.com/datvietvac-techhub/mcp-web-tools/blob/main/LICENSE): Apache License 2.0.
+- [Notices](https://github.com/datvietvac-techhub/mcp-web-tools/blob/main/NOTICE): third-party attributions for Crawl4AI, SearXNG, FastMCP, Valkey.
