@@ -19,7 +19,9 @@ from pydantic import BaseModel
 
 from tools import web_extractor_impl, web_search_impl
 
-app = FastAPI(title="web-tool playground", description="Dev API for web_search / web_extractor")
+app = FastAPI(
+    title="web-tool playground", description="Dev API for web_search / web_extractor"
+)
 
 
 class SearchReq(BaseModel):
