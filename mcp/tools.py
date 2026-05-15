@@ -24,8 +24,12 @@ MAX_URLS_PER_CALL = 20
 SEARCH_CACHE_TTL = int(os.environ.get("MCP_CACHE_TTL", "300"))
 EXTRACT_CACHE_TTL = int(os.environ.get("EXTRACT_CACHE_TTL", "1800"))
 
-_search_cache = TTLCache(maxsize=512, ttl=SEARCH_CACHE_TTL) if SEARCH_CACHE_TTL > 0 else None
-_extract_cache = TTLCache(maxsize=1024, ttl=EXTRACT_CACHE_TTL) if EXTRACT_CACHE_TTL > 0 else None
+_search_cache = (
+    TTLCache(maxsize=512, ttl=SEARCH_CACHE_TTL) if SEARCH_CACHE_TTL > 0 else None
+)
+_extract_cache = (
+    TTLCache(maxsize=1024, ttl=EXTRACT_CACHE_TTL) if EXTRACT_CACHE_TTL > 0 else None
+)
 
 _client: httpx.AsyncClient | None = None
 
@@ -44,7 +48,9 @@ def _normalize_url(url: str) -> str:
     try:
         parts = urlsplit(url.strip())
         path = parts.path.rstrip("/") or "/"
-        return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, parts.query, ""))
+        return urlunsplit(
+            (parts.scheme.lower(), parts.netloc.lower(), path, parts.query, "")
+        )
     except Exception:
         return url.strip()
 
@@ -53,7 +59,12 @@ def _coerce_markdown(value) -> str:
     if isinstance(value, str):
         return value
     if isinstance(value, dict):
-        return value.get("fit_markdown") or value.get("raw_markdown") or value.get("markdown") or ""
+        return (
+            value.get("fit_markdown")
+            or value.get("raw_markdown")
+            or value.get("markdown")
+            or ""
+        )
     return ""
 
 
@@ -168,7 +179,10 @@ async def _extract_one(
     async with sem:
         try:
             resp = await _get_client().post(
-                f"{CRAWL4AI_URL}/md", json=payload, headers=headers, timeout=EXTRACT_TIMEOUT
+                f"{CRAWL4AI_URL}/md",
+                json=payload,
+                headers=headers,
+                timeout=EXTRACT_TIMEOUT,
             )
             resp.raise_for_status()
             data = resp.json()
