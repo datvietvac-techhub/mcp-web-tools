@@ -257,6 +257,10 @@ def test_validate_fetch_url_ssrf_protection():
         == "url uses a disallowed internal hostname"
     )
     assert (
+        validate_fetch_url("http://localhost.")
+        == "url uses a disallowed internal hostname"
+    )
+    assert (
         validate_fetch_url("http://my-service.local")
         == "url uses a disallowed internal hostname"
     )
@@ -268,6 +272,10 @@ def test_validate_fetch_url_ssrf_protection():
     # Block private, loopback, and link-local IP addresses (IPv4)
     assert (
         validate_fetch_url("http://127.0.0.1")
+        == "url resolves to a disallowed internal IP address"
+    )
+    assert (
+        validate_fetch_url("http://127.0.0.1.")
         == "url resolves to a disallowed internal IP address"
     )
     assert (

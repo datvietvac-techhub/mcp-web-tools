@@ -27,7 +27,7 @@ def validate_fetch_url(url: str) -> str | None:
     if not parts.netloc or not parts.hostname:
         return "url must include a host"
 
-    hostname = parts.hostname.lower()
+    hostname = parts.hostname.lower().rstrip(".")
 
     if (
         hostname == "localhost"
