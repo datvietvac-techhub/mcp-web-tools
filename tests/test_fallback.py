@@ -66,7 +66,7 @@ def test_search_fallback_on_primary_hard_failure(monkeypatch):
 
     assert out["provider"] == "searxng"
     assert len(out["results"]) == 1
-    assert any("tavily.com" in u for u in calls)
+    assert any(urlparse(u).hostname == "api.tavily.com" for u in calls)
     assert any("searxng" in u for u in calls)
 
 
