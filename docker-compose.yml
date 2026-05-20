@@ -56,7 +56,9 @@ services:
       start_period: 40s
 
   web-mcp:
-    build: ./mcp
+    build:
+      context: .
+      dockerfile: mcp/Dockerfile
     container_name: web-tool-mcp
     environment:
       - SEARXNG_URL=http://searxng:8080
@@ -70,6 +72,11 @@ services:
       - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
       - EXTRACT_TIMEOUT=${EXTRACT_TIMEOUT:-60}
       - MAX_CONCURRENCY=${MAX_CONCURRENCY:-5}
+      - API_TOKEN=${API_TOKEN:-}
+      - PROVIDERS_CONFIG=/app/config/providers.yaml
+      - FALLBACK_VERBOSE=${FALLBACK_VERBOSE:-false}
+    volumes:
+      - ./config/providers.yaml:/app/config/providers.yaml:ro
     ports:
       - "${MCP_PORT:-8000}:${MCP_PORT:-8000}"
     networks:
@@ -80,6 +87,16 @@ services:
       crawl4ai:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os,urllib.request; urllib.request.urlopen('http://localhost:' + os.environ.get('MCP_PORT','8000') + '/healthz')\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 networks:
   web-tool-net:

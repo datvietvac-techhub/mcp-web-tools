@@ -187,6 +187,16 @@ else
   info ".env already exists — leaving it as is"
 fi
 
+# ── 2b. providers.yaml ────────────────────────────────────────────────────────
+step "Configuring provider fallback chains"
+if [ ! -f config/providers.yaml ]; then
+  mkdir -p config
+  python3 scripts/config_provider.py --yes
+  ok "created config/providers.yaml (local-only; run make config to add API keys)"
+else
+  info "config/providers.yaml already exists — leaving it as is"
+fi
+
 # ── 3. SEARXNG_SECRET ─────────────────────────────────────────────────────────
 gen_secret() {
   if command -v openssl >/dev/null 2>&1; then openssl rand -hex 32
@@ -212,7 +222,6 @@ fi
 
 # ── done ──────────────────────────────────────────────────────────────────────
 mcp_port="$(grep -E '^MCP_PORT=' .env | cut -d= -f2- || echo 8000)"
-play_port="$(grep -E '^PLAYGROUND_PORT=' .env | cut -d= -f2- || echo 8001)"
 printf '\n%s\n' "${BOLD}${GRN}✔ bootstrap complete${RST}"
 cat <<EOF
 
@@ -223,12 +232,13 @@ cat <<EOF
     cd "$SCRIPT_DIR"
     make up           # start the stack
     make smoke        # verify endpoints
-    make playground   # launch the FastAPI dev API on :${play_port:-8001}
 
   ${BOLD}Endpoints (once up)${RST}
     SearXNG    internal: http://searxng:8080
     Crawl4AI   internal: http://crawl4ai:11235
     MCP        http://localhost:${mcp_port:-8000}/mcp
+    REST API   http://localhost:${mcp_port:-8000}/api/v1/search
+    OpenAPI    http://localhost:${mcp_port:-8000}/docs
 
 EOF
 exit 0

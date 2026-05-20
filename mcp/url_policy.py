@@ -19,8 +19,8 @@ def validate_fetch_url(url: str) -> str | None:
 
     try:
         parts = urlsplit(url.strip())
-    except ValueError as exc:
-        return f"invalid url: {exc}"
+    except ValueError:
+        return "invalid url format"
 
     if parts.scheme.lower() not in ALLOWED_SCHEMES:
         return "url scheme must be http or https"
