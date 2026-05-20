@@ -1,6 +1,7 @@
 import asyncio
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 import pytest
@@ -54,7 +55,7 @@ def test_search_fallback_on_primary_hard_failure(monkeypatch):
 
         async def post(self, url, **kwargs):
             calls.append(url)
-            if "tavily.com" in url:
+            if urlparse(url).hostname == "api.tavily.com":
                 response = httpx.Response(503, request=httpx.Request("POST", url))
                 raise httpx.HTTPStatusError("fail", request=kwargs.get("request") or httpx.Request("POST", url), response=response)
             raise AssertionError(f"unexpected post to {url}")
@@ -75,7 +76,7 @@ def test_search_no_fallback_on_empty_results(monkeypatch):
             return FakeResponse({"results": []})
 
         async def post(self, url, **kwargs):
-            if "tavily.com" in url:
+            if urlparse(url).hostname == "api.tavily.com":
                 return FakeResponse({"results": []})
             raise AssertionError(f"unexpected post to {url}")
 
