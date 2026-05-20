@@ -17,8 +17,12 @@ from url_policy import validate_fetch_url
 SEARCH_CACHE_TTL = int(os.environ.get("MCP_CACHE_TTL", "300"))
 EXTRACT_CACHE_TTL = int(os.environ.get("EXTRACT_CACHE_TTL", "1800"))
 
-_search_cache = TTLCache(maxsize=512, ttl=SEARCH_CACHE_TTL) if SEARCH_CACHE_TTL > 0 else None
-_extract_cache = TTLCache(maxsize=1024, ttl=EXTRACT_CACHE_TTL) if EXTRACT_CACHE_TTL > 0 else None
+_search_cache = (
+    TTLCache(maxsize=512, ttl=SEARCH_CACHE_TTL) if SEARCH_CACHE_TTL > 0 else None
+)
+_extract_cache = (
+    TTLCache(maxsize=1024, ttl=EXTRACT_CACHE_TTL) if EXTRACT_CACHE_TTL > 0 else None
+)
 
 
 def _normalize_url(url: str) -> str:

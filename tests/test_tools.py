@@ -34,7 +34,9 @@ class FakeResponse:
 
 
 class FakeClient:
-    def __init__(self, get_responses=None, post_responses=None, get_exc=None, post_exc=None):
+    def __init__(
+        self, get_responses=None, post_responses=None, get_exc=None, post_exc=None
+    ):
         self.get_responses = list(get_responses or [])
         self.post_responses = list(post_responses or [])
         self.get_exc = get_exc
@@ -67,12 +69,17 @@ def reset_tool_state(monkeypatch):
 
 
 def test_normalize_url_lowercases_and_preserves_query():
-    assert tools._normalize_url("HTTPS://Example.COM/Path/?a=1") == "https://example.com/Path?a=1"
+    assert (
+        tools._normalize_url("HTTPS://Example.COM/Path/?a=1")
+        == "https://example.com/Path?a=1"
+    )
 
 
 def test_coerce_markdown_handles_supported_shapes():
     assert tools._coerce_markdown("hello") == "hello"
-    assert tools._coerce_markdown({"fit_markdown": "fit", "raw_markdown": "raw"}) == "fit"
+    assert (
+        tools._coerce_markdown({"fit_markdown": "fit", "raw_markdown": "raw"}) == "fit"
+    )
     assert tools._coerce_markdown({"raw_markdown": "raw"}) == "raw"
     assert tools._coerce_markdown({"markdown": "plain"}) == "plain"
     assert tools._coerce_markdown(["nope"]) == ""
@@ -82,7 +89,9 @@ def test_validate_fetch_url_accepts_only_http_urls():
     assert validate_fetch_url("https://example.com/a") is None
     assert validate_fetch_url("http://example.com/a") is None
     assert validate_fetch_url(" ") == "url is required"
-    assert validate_fetch_url("ftp://example.com/a") == "url scheme must be http or https"
+    assert (
+        validate_fetch_url("ftp://example.com/a") == "url scheme must be http or https"
+    )
     assert validate_fetch_url("https:///missing-host") == "url must include a host"
 
 
@@ -102,8 +111,16 @@ def test_web_search_clamps_and_deduplicates(monkeypatch):
             FakeResponse(
                 {
                     "results": [
-                        {"title": "A", "url": "HTTPS://Example.com/a/", "content": "one"},
-                        {"title": "B", "url": "https://example.com/a", "content": "dup"},
+                        {
+                            "title": "A",
+                            "url": "HTTPS://Example.com/a/",
+                            "content": "one",
+                        },
+                        {
+                            "title": "B",
+                            "url": "https://example.com/a",
+                            "content": "dup",
+                        },
                         {"title": "C", "url": "https://other.test/", "content": "two"},
                     ],
                     "suggestions": ["x", "y", "z", "a", "b", "c"],
@@ -171,7 +188,11 @@ def test_web_extractor_explicit_provider(monkeypatch):
 
 
 def test_web_search_cache_hit_skips_second_network(monkeypatch):
-    client = FakeClient(get_responses=[FakeResponse({"results": [{"title": "A", "url": "https://a.test"}]})])
+    client = FakeClient(
+        get_responses=[
+            FakeResponse({"results": [{"title": "A", "url": "https://a.test"}]})
+        ]
+    )
     monkeypatch.setattr(provider_http, "_client", client)
 
     first = run(tools.web_search_impl("hello"))
@@ -184,21 +205,30 @@ def test_web_search_cache_hit_skips_second_network(monkeypatch):
 def test_web_extractor_preserves_order_and_payload(monkeypatch):
     client = FakeClient(
         post_responses=[
-            FakeResponse({"url": "https://a.test", "markdown": {"fit_markdown": "alpha beta"}}),
+            FakeResponse(
+                {"url": "https://a.test", "markdown": {"fit_markdown": "alpha beta"}}
+            ),
             FakeResponse({"url": "https://b.test", "markdown": "gamma"}),
         ]
     )
     monkeypatch.setattr(provider_http, "_client", client)
 
-    out = run(tools.web_extractor_impl(["https://a.test", "https://b.test"], mode="raw"))
+    out = run(
+        tools.web_extractor_impl(["https://a.test", "https://b.test"], mode="raw")
+    )
 
-    assert [item["url"] for item in out["results"]] == ["https://a.test", "https://b.test"]
+    assert [item["url"] for item in out["results"]] == [
+        "https://a.test",
+        "https://b.test",
+    ]
     assert out["results"][0]["word_count"] == 2
     assert client.post_calls[0][1]["json"] == {"url": "https://a.test", "f": "raw"}
 
 
 def test_web_extractor_truncates_to_max_urls(monkeypatch):
-    responses = [FakeResponse({"url": f"https://{i}.test", "markdown": "ok"}) for i in range(20)]
+    responses = [
+        FakeResponse({"url": f"https://{i}.test", "markdown": "ok"}) for i in range(20)
+    ]
     client = FakeClient(post_responses=responses)
     monkeypatch.setattr(provider_http, "_client", client)
 
@@ -257,3 +287,75 @@ def test_web_extractor_bypass_cache_refetches(monkeypatch):
     assert first["results"][0]["markdown"] == "first"
     assert second["results"][0]["markdown"] == "second"
     assert len(client.post_calls) == 2
+
+
+def test_validate_fetch_url_ssrf_protection():
+    # External URLs are allowed
+    assert validate_fetch_url("http://example.com") is None
+
+    # Block internal hostnames
+    assert (
+        validate_fetch_url("http://localhost:8000")
+        == "url uses a disallowed internal hostname"
+    )
+    assert (
+        validate_fetch_url("http://localhost.")
+        == "url uses a disallowed internal hostname"
+    )
+    assert (
+        validate_fetch_url("http://my-service.local")
+        == "url uses a disallowed internal hostname"
+    )
+    assert (
+        validate_fetch_url("http://db.internal")
+        == "url uses a disallowed internal hostname"
+    )
+
+    # Block private, loopback, and link-local IP addresses (IPv4)
+    assert (
+        validate_fetch_url("http://127.0.0.1")
+        == "url resolves to a disallowed internal IP address"
+    )
+    assert (
+        validate_fetch_url("http://127.0.0.1.")
+        == "url resolves to a disallowed internal IP address"
+    )
+    assert (
+        validate_fetch_url("http://10.0.0.1")
+        == "url resolves to a disallowed internal IP address"
+    )
+    assert (
+        validate_fetch_url("http://192.168.1.100")
+        == "url resolves to a disallowed internal IP address"
+    )
+    assert (
+        validate_fetch_url("http://169.254.169.254")
+        == "url resolves to a disallowed internal IP address"
+    )
+
+    # Block private/loopback IP addresses (IPv6)
+    assert (
+        validate_fetch_url("http://[::1]/")
+        == "url resolves to a disallowed internal IP address"
+    )
+
+    # Block unspecified, reserved, and multicast IP addresses
+    assert (
+        validate_fetch_url("http://0.0.0.0")
+        == "url resolves to a disallowed internal IP address"
+    )
+    assert (
+        validate_fetch_url("http://224.0.0.1")
+        == "url resolves to a disallowed internal IP address"
+    )
+    assert (
+        validate_fetch_url("http://240.0.0.1")
+        == "url resolves to a disallowed internal IP address"
+    )
+    assert (
+        validate_fetch_url("http://[::]")
+        == "url resolves to a disallowed internal IP address"
+    )
+
+    # Invalid resolution is allowed through here, relying on HTTP client to fail
+    assert validate_fetch_url("http://this-domain-does-not-exist.com") is None
