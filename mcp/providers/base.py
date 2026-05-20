@@ -80,7 +80,8 @@ class ExtractProvider(Protocol):
 
     def is_configured(self) -> bool: ...
 
-    def supports_mode(self, mode: str) -> bool: ...
+    def supports_mode(self, mode: str) -> bool:
+        pass
 
     async def extract(
         self,
