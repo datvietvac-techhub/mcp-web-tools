@@ -71,7 +71,8 @@ class SearchProvider(Protocol):
         categories: str,
         language: str,
         time_range: str | None,
-    ) -> dict: ...
+    ) -> dict:
+        raise NotImplementedError
 
 
 class ExtractProvider(Protocol):
